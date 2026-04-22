@@ -1,0 +1,43 @@
+# MDVRP Solver Requirements
+# ===========================
+# This file lists all Python packages required for the MDVRP solver implementation
+
+# Core Dependencies (already installed)
+# =====================================
+numpy>=2.4.4              # Numerical computing - arrays, linear algebra
+gurobipy>=12.0.3          # MILP solver for exact optimization
+
+# New Dependencies for Library Integration
+# =========================================
+
+# DEAP - Distributed Evolutionary Algorithms in Python
+# Used for: Hybrid Genetic Algorithm (HGA) solver framework
+deap>=1.4.1               # Genetic algorithm framework (creator, toolbox, algorithms)
+
+# Pandas - Data manipulation and analysis
+# Used for: CSV/XLSX data loading, DataFrame operations
+pandas>=2.0.0             # Data loading from CSV/XLSX files
+
+# SciPy - Scientific computing
+# Used for: Distance matrix calculation (scipy.spatial.distance.cdist)
+scipy>=1.11.0             # Optimized distance computations
+
+# tqdm - Progress bars
+# Used for: Progress tracking in all iterative solvers
+tqdm>=4.66.0              # Progress bars for HGA, Greedy, MILP solvers
+
+# openpyxl - Excel file support
+# Used for: Reading XLSX files with Pandas
+openpyxl>=3.1.0           # Excel file format support for Pandas
+
+# ReportLab - PDF generation
+# Used for: Exporting solution reports to PDF
+reportlab>=4.0.0          # PDF document generation
+
+# GeoJSON - GeoJSON format support
+# Used for: Exporting routes as GeoJSON for mapping
+geojson>=3.1.0            # GeoJSON format for geographic data export
+
+# Matplotlib - Plotting (optional, for future visualization)
+# Used for: Potential future visualization features
+matplotlib>=3.8.0         # Plotting library (optional)
