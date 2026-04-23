@@ -293,10 +293,10 @@ class MDVRPHGA:
         # If any customers are missing, add them to the least-loaded vehicle
         missing_customers = set(self.customers) - served_customers
         if missing_customers:
-            # Find least-loaded vehicle
+            # Find least-loaded vehicle (filter out None values from routes)
             least_loaded_vehicle = min(
                 self.vehicles,
-                key=lambda v: sum(self.demand[c] for c in routes[v])
+                key=lambda v: sum(self.demand[c] for c in routes[v] if c is not None)
             )
             # Add missing customers to this vehicle
             routes[least_loaded_vehicle].extend(list(missing_customers))

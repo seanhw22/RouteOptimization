@@ -41,3 +41,18 @@ geojson>=3.1.0            # GeoJSON format for geographic data export
 # Matplotlib - Plotting (optional, for future visualization)
 # Used for: Potential future visualization features
 matplotlib>=3.8.0         # Plotting library (optional)
+
+# Database Dependencies
+# ====================
+
+# SQLAlchemy - SQL ORM and database abstraction
+# Used for: Database connection management and queries
+sqlalchemy>=2.0.0         # SQL ORM for PostgreSQL support
+
+# psycopg2-binary - PostgreSQL database driver
+# Used for: Connecting to PostgreSQL database
+psycopg2-binary>=2.9.0    # PostgreSQL adapter for Python
+
+# python-dotenv - Environment variable management
+# Used for: Loading DATABASE_URL from .env file (optional)
+python-dotenv>=1.0.0      # Load environment variables from .env file

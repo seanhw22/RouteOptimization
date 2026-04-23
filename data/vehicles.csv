@@ -1,4 +1,0 @@
-vehicle_id,depot_id,capacity_kg,max_time_hours,speed_kmh
-V1,D1,60,10,40
-V2,D2,60,10,40
-V3,D1,50,10,40

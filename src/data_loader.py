@@ -6,6 +6,8 @@ Supports CSV, XLSX, and dict-based input (backward compatibility)
 import pandas as pd
 import os
 from typing import Dict, List, Tuple, Union, Optional
+from sqlalchemy import text
+import numpy as np
 
 
 class MDVRPDataLoader:
@@ -24,9 +26,9 @@ class MDVRPDataLoader:
         Load MDVRP data from CSV files.
 
         Expected files:
-        - depots.csv: depot_id, latitude, longitude
-        - customers.csv: customer_id, latitude, longitude, deadline_hours
-        - vehicles.csv: vehicle_id, depot_id, capacity_kg, max_time_hours, speed_kmh
+        - depots.csv: depot_id, x, y
+        - customers.csv: customer_id, x, y, deadline_hours
+        - vehicles.csv: vehicle_id, depot_id, vehicle_type, capacity_kg, max_operational_hrs, speed_kmh
         - orders.csv: customer_id, item_id, quantity
         - items.csv: item_id, weight_kg, expiry_hours
 
@@ -86,11 +88,11 @@ class MDVRPDataLoader:
 
         # Add depot coordinates
         for _, row in depots_df.iterrows():
-            coordinates[row['depot_id']] = (row['latitude'], row['longitude'])
+            coordinates[row['depot_id']] = (row['x'], row['y'])
 
         # Add customer coordinates
         for _, row in customers_df.iterrows():
-            coordinates[row['customer_id']] = (row['latitude'], row['longitude'])
+            coordinates[row['customer_id']] = (row['x'], row['y'])
 
         # Build vehicle speed dict
         vehicle_speed = vehicles_df.set_index('vehicle_id')['speed_kmh'].to_dict()
@@ -102,7 +104,7 @@ class MDVRPDataLoader:
         vehicle_capacity = vehicles_df.set_index('vehicle_id')['capacity_kg'].to_dict()
 
         # Build max operational times
-        max_operational_time = vehicles_df.set_index('vehicle_id')['max_time_hours'].to_dict()
+        max_operational_time = vehicles_df.set_index('vehicle_id')['max_operational_hrs'].to_dict()
 
         # Build customer deadlines
         customer_deadlines = customers_df.set_index('customer_id')['deadline_hours'].to_dict()
@@ -152,9 +154,9 @@ class MDVRPDataLoader:
         Load MDVRP data from single Excel file with multiple sheets.
 
         Expected sheets:
-        - depots: depot_id, latitude, longitude
-        - customers: customer_id, latitude, longitude, deadline_hours
-        - vehicles: vehicle_id, depot_id, capacity_kg, max_time_hours, speed_kmh
+        - depots: depot_id, x, y
+        - customers: customer_id, x, y, deadline_hours
+        - vehicles: vehicle_id, depot_id, vehicle_type, capacity_kg, max_operational_hrs, speed_kmh
         - orders: customer_id, item_id, quantity
         - items: item_id, weight_kg, expiry_hours
 
@@ -190,15 +192,15 @@ class MDVRPDataLoader:
         # Build coordinates
         coordinates = {}
         for _, row in depots_df.iterrows():
-            coordinates[row['depot_id']] = (row['latitude'], row['longitude'])
+            coordinates[row['depot_id']] = (row['x'], row['y'])
         for _, row in customers_df.iterrows():
-            coordinates[row['customer_id']] = (row['latitude'], row['longitude'])
+            coordinates[row['customer_id']] = (row['x'], row['y'])
 
         # Build dicts
         vehicle_speed = vehicles_df.set_index('vehicle_id')['speed_kmh'].to_dict()
         depot_for_vehicle = vehicles_df.set_index('vehicle_id')['depot_id'].to_dict()
         vehicle_capacity = vehicles_df.set_index('vehicle_id')['capacity_kg'].to_dict()
-        max_operational_time = vehicles_df.set_index('vehicle_id')['max_time_hours'].to_dict()
+        max_operational_time = vehicles_df.set_index('vehicle_id')['max_operational_hrs'].to_dict()
         customer_deadlines = customers_df.set_index('customer_id')['deadline_hours'].to_dict()
         item_weights = items_df.set_index('item_id')['weight_kg'].to_dict()
         item_expiry = items_df.set_index('item_id')['expiry_hours'].to_dict()
@@ -374,6 +376,197 @@ class MDVRPDataLoader:
             for item in orders.keys():
                 if item not in self.items:
                     raise ValueError(f"Invalid item {item} in order for {customer}")
+
+    def load_from_database(self, db_connection, dataset_id: int) -> Dict:
+        """
+        Load MDVRP data from PostgreSQL database.
+
+        Performs JOINs to denormalize data into same format as CSV loading.
+        Returns identical dict structure as load_csv() for compatibility.
+
+        Args:
+            db_connection: DatabaseConnection object with active session
+            dataset_id: ID of dataset to load
+
+        Returns:
+            Dict with same structure as load_csv()
+
+        Raises:
+            ValueError: If data validation fails
+            Exception: If database query fails
+        """
+        # Get database session
+        session = db_connection.get_session()
+
+        try:
+            # Query depots with coordinates (JOIN)
+            depots_query = text("""
+                SELECT d.depot_id, n.x, n.y
+                FROM depots d
+                JOIN nodes n ON d.node_id = n.node_id
+                WHERE d.dataset_id = :dataset_id
+            """)
+            depots_df = pd.read_sql_query(
+                depots_query,
+                db_connection.engine,
+                params={'dataset_id': dataset_id}
+            )
+
+            # Query customers with coordinates and deadlines (JOIN)
+            customers_query = text("""
+                SELECT c.customer_id, n.x, n.y, c.deadline_hours
+                FROM customers c
+                JOIN nodes n ON c.node_id = n.node_id
+                WHERE c.dataset_id = :dataset_id
+            """)
+            customers_df = pd.read_sql_query(
+                customers_query,
+                db_connection.engine,
+                params={'dataset_id': dataset_id}
+            )
+
+            # Query vehicles with depot info
+            vehicles_query = text("""
+                SELECT vehicle_id, depot_id, vehicle_type,
+                       capacity_kg, max_operational_hrs, speed_kmh
+                FROM vehicles
+                WHERE dataset_id = :dataset_id
+            """)
+            vehicles_df = pd.read_sql_query(
+                vehicles_query,
+                db_connection.engine,
+                params={'dataset_id': dataset_id}
+            )
+
+            # Query items
+            items_query = text("""
+                SELECT item_id, weight_kg, expiry_hours
+                FROM items
+                WHERE dataset_id = :dataset_id
+            """)
+            items_df = pd.read_sql_query(
+                items_query,
+                db_connection.engine,
+                params={'dataset_id': dataset_id}
+            )
+
+            # Query orders (need to join to customers to filter by dataset)
+            orders_query = text("""
+                SELECT o.customer_id, o.item_id, o.quantity
+                FROM orders o
+                JOIN customers c ON o.customer_id = c.customer_id
+                WHERE c.dataset_id = :dataset_id
+            """)
+            orders_df = pd.read_sql_query(
+                orders_query,
+                db_connection.engine,
+                params={'dataset_id': dataset_id}
+            )
+
+        finally:
+            session.close()
+
+        # Process data identically to CSV loading
+        self.depots = depots_df['depot_id'].tolist()
+        self.customers = customers_df['customer_id'].tolist()
+        self.vehicles = vehicles_df['vehicle_id'].tolist()
+        self.items = items_df['item_id'].tolist()
+
+        # Build coordinates
+        coordinates = {}
+        for _, row in depots_df.iterrows():
+            coordinates[row['depot_id']] = (row['x'], row['y'])
+        for _, row in customers_df.iterrows():
+            coordinates[row['customer_id']] = (row['x'], row['y'])
+
+        # Build vehicle attributes
+        vehicle_speed = vehicles_df.set_index('vehicle_id')['speed_kmh'].to_dict()
+        depot_for_vehicle = vehicles_df.set_index('vehicle_id')['depot_id'].to_dict()
+        vehicle_capacity = vehicles_df.set_index('vehicle_id')['capacity_kg'].to_dict()
+        max_operational_time = vehicles_df.set_index('vehicle_id')['max_operational_hrs'].to_dict()
+
+        # Build customer attributes
+        customer_deadlines = customers_df.set_index('customer_id')['deadline_hours'].to_dict()
+
+        # Build item attributes
+        item_weights = items_df.set_index('item_id')['weight_kg'].to_dict()
+        item_expiry = items_df.set_index('item_id')['expiry_hours'].to_dict()
+
+        # Build customer orders (nested dict)
+        customer_orders = {}
+        for customer in self.customers:
+            customer_orders[customer] = {}
+            customer_orders_df = orders_df[orders_df['customer_id'] == customer]
+            for _, row in customer_orders_df.iterrows():
+                customer_orders[customer][row['item_id']] = row['quantity']
+
+        # Validate using existing validation method
+        self._validate_data(
+            coordinates, vehicle_speed, depot_for_vehicle,
+            vehicle_capacity, max_operational_time, customer_deadlines,
+            item_weights, item_expiry, customer_orders
+        )
+
+        # Build all required matrices using DistanceMatrixBuilder (same as CSV loading)
+        from src.distance_matrix import DistanceMatrixBuilder
+
+        builder = DistanceMatrixBuilder(coordinates, vehicle_speed)
+        params = builder.build_all_matrices(
+            self.depots, self.customers, self.vehicles, self.items,
+            coordinates, vehicle_speed,
+            customer_orders, item_weights,
+            vehicle_capacity, max_operational_time,
+            customer_deadlines, depot_for_vehicle
+        )
+
+        # Convert NumPy matrices to dictionary format for solver compatibility
+        # Solvers expect dist as {node_i: {node_j: distance}} not as NumPy array
+        # Solvers expect T as {vehicle_id: {node_i: {node_j: time}}} not as NumPy arrays
+        nodes = self.depots + self.customers
+
+        # Convert distance matrix
+        dist_dict = {}
+        for i, node_i in enumerate(nodes):
+            dist_dict[node_i] = {}
+            for j, node_j in enumerate(nodes):
+                dist_dict[node_i][node_j] = float(params['dist'][i][j])
+
+        # Convert time matrices (one per vehicle)
+        T_dict = {}
+        for vehicle in self.vehicles:
+            T_dict[vehicle] = {}
+            time_matrix = params['T'][vehicle]  # NumPy array
+            for i, node_i in enumerate(nodes):
+                T_dict[vehicle][node_i] = {}
+                for j, node_j in enumerate(nodes):
+                    T_dict[vehicle][node_i][node_j] = float(time_matrix[i][j])
+
+        # Replace NumPy arrays with dictionaries
+        params['dist'] = dist_dict
+        params['T'] = T_dict
+
+        # Package data (identical to CSV format)
+        # Include raw data plus computed matrices
+        self.data = {
+            # Raw data
+            'depots': self.depots,
+            'customers': self.customers,
+            'vehicles': self.vehicles,
+            'items': self.items,
+            'coordinates': coordinates,
+            'vehicle_speed': vehicle_speed,
+            'depot_for_vehicle': depot_for_vehicle,
+            'vehicle_capacity': vehicle_capacity,
+            'max_operational_time': max_operational_time,
+            'customer_deadlines': customer_deadlines,
+            'item_weights': item_weights,
+            'item_expiry': item_expiry,
+            'customer_orders': customer_orders,
+            # Computed matrices (from DistanceMatrixBuilder)
+            **params  # This includes dist (now as dict), T, Q, T_max, L, w, r, expiry, depot_for_vehicle
+        }
+
+        return self.data
 
     def validate_data(self, data: Dict) -> bool:
         """

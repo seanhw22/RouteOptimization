@@ -10,6 +10,7 @@ This project provides three solvers for the Multi-Depot Vehicle Routing Problem 
 
 All solvers now support:
 - **CSV data loading** via Pandas
+- **PostgreSQL database** integration
 - **NumPy optimization** for vectorized calculations
 - **SciPy integration** for efficient distance matrix computation
 - **DEAP framework** for genetic algorithms
@@ -35,6 +36,8 @@ Required packages:
 - `reportlab>=4.0.0` - PDF generation
 - `geojson>=3.1.0` - GeoJSON export
 - `matplotlib>=3.8.0` - Plotting (optional)
+- `sqlalchemy>=2.0.0` - Database ORM (for PostgreSQL)
+- `psycopg2-binary>=2.9.0` - PostgreSQL driver
 
 ## Usage
 
@@ -82,7 +85,80 @@ milp.build_model()
 solution, status = milp.solve(time_limit=60)
 ```
 
-### Option 2: Using Dictionary Parameters (Backward Compatible)
+### Option 2: Using PostgreSQL Database
+
+The system supports loading data from a PostgreSQL database for production use.
+
+#### Database Setup
+
+1. **Create database schema:**
+```bash
+psql -U your_user -d your_database -f database/schema.sql
+```
+
+2. **Populate with data:**
+```bash
+psql -U your_user -d your_database -f database/populate_data.sql
+```
+
+3. **Configure database connection:**
+
+**Option A: Using .env file (Recommended)**
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit .env with your database credentials
+DATABASE_URL=postgresql://your_user:your_password@localhost:5432/mdvrp
+```
+
+**Option B: Using environment variable**
+```bash
+export DATABASE_URL="postgresql://user:password@localhost:5432/mdvrp"
+```
+
+#### Using Database Data
+
+The `.env` file will be loaded automatically:
+
+```python
+from src.data_loader import MDVRPDataLoader
+from src.database import DatabaseConnection
+from mdvrp_greedy import MDVRPGreedy
+
+# Connects using DATABASE_URL from .env file
+conn = DatabaseConnection()
+
+# Load data from database
+loader = MDVRPDataLoader()
+data = loader.load_from_database(conn, dataset_id=1)
+
+# Use with any solver
+greedy = MDVRPGreedy(params=data, seed=42)
+solution, status = greedy.solve()
+```
+
+Or specify the database URL explicitly:
+
+```python
+from src.data_loader import MDVRPDataLoader
+from src.database import DatabaseConnection
+
+conn = DatabaseConnection('postgresql://user:password@localhost:5432/mdvrp')
+loader = MDVRPDataLoader()
+data = loader.load_from_database(conn, dataset_id=1)
+```
+
+#### Database Schema
+
+The database uses a normalized schema with tables for:
+- **Core data**: `nodes`, `depots`, `customers`, `vehicles`, `items`, `orders`
+- **User management**: `users`, `sessions`, `datasets`
+- **Experiment tracking**: `experiments`, `result_metrics`, `routes`
+
+All data loading methods (CSV and database) return the same dict format, ensuring solver compatibility.
+
+### Option 3: Using Dictionary Parameters (Backward Compatible)
 
 ```python
 from mdvrp_greedy import MDVRPGreedy
