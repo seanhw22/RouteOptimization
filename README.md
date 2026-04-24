@@ -158,6 +158,92 @@ The database uses a normalized schema with tables for:
 
 All data loading methods (CSV and database) return the same dict format, ensuring solver compatibility.
 
+### Option 2.1: Database Mode with CLI (NEW!)
+
+**NEW FEATURE:** All solver scripts now support database mode via CLI arguments with experiment tracking and distance caching!
+
+#### Quick Start with Database
+
+```bash
+# 1. Setup database (see DATABASE_USAGE.md for details)
+docker run -d --name mdvrp_db -e POSTGRES_PASSWORD=mdvrp \
+  -e POSTGRES_USER=mdvrp -e POSTGRES_DB=mdvrp -p 5432:5432 postgres:14-alpine
+
+# 2. Initialize schema
+psql -U mdvrp -d mdvrp -f database/schema.sql
+
+# 3. Populate with data
+python scripts/populate_database.py 1 "Test Dataset" "postgresql://mdvrp:mdvrp@localhost:5432/mdvrp" "data/"
+
+# 4. Run solvers with database!
+python individual_runs/run_greedy.py --dataset 1
+python individual_runs/run_hga.py --dataset 1
+python individual_runs/run_milp.py --dataset 1
+python individual_runs/run_all.py --dataset 1  # Run all three!
+```
+
+#### CLI Arguments
+
+All solver scripts (`run_greedy.py`, `run_hga.py`, `run_milp.py`, `run_all.py`) support:
+
+- `--dataset N` - Load dataset with ID N from database
+- `--db-url URL` - Override DATABASE_URL for this run
+- Default: CSV mode (backward compatible)
+
+#### Features
+
+✅ **Distance Caching** - Computed distances cached in database
+- First run: Computes and saves distances
+- Subsequent runs: Loads from cache (50-80% faster data loading)
+- Automatic validation via spot-checking
+
+✅ **Experiment Tracking** - Every solver run tracked in database
+- Greedy: algorithm, seed
+- HGA: algorithm, population_size, mutation_rate, crossover_rate, seed
+- MILP: algorithm
+- Results: runtime stored
+- Routes: route segments stored for reconstruction
+
+✅ **Performance Analysis** - Query and compare experiments
+```sql
+-- Compare solver performance
+SELECT algorithm, AVG(runtime_id) as avg_runtime
+FROM experiments e
+JOIN result_metrics r ON e.experiment_id = r.experiment_id
+GROUP BY algorithm;
+```
+
+#### Examples
+
+```bash
+# Run with dataset 1
+python individual_runs/run_greedy.py --dataset 1
+
+# Run with custom database
+python individual_runs/run_hga.py --dataset 1 \
+  --db-url postgresql://user:pass@remote-host:5432/mdvrp
+
+# Run all algorithms
+python individual_runs/run_all.py --dataset 1
+
+# Run with custom parameters
+python individual_runs/run_hga.py --dataset 1 \
+  --generations 100 --population-size 100
+
+# Backward compatible: no args = CSV mode
+python individual_runs/run_greedy.py  # Uses data/ directory
+```
+
+#### Documentation
+
+See [DATABASE_USAGE.md](DATABASE_USAGE.md) for comprehensive database documentation including:
+- Complete setup instructions
+- Data loading procedures
+- Experiment tracking and querying
+- Distance caching behavior
+- Performance benchmarks
+- Troubleshooting guide
+
 ### Option 3: Using Dictionary Parameters (Backward Compatible)
 
 ```python

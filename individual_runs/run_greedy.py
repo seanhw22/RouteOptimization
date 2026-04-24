@@ -16,11 +16,15 @@ sys.path.insert(0, parent_dir)
 from algorithms.mdvrp_greedy import MDVRPGreedy
 from src.exporter import MDVRPExporter
 from src.data_loader import MDVRPDataLoader
+from src.database import DatabaseConnection
+from src.distance_cache import DistanceCache
+from src.experiment_tracker import ExperimentTracker
+from sqlalchemy import text
 from run_config import setup_data_source, cleanup_database_connection
 
 
 def run_greedy(data_dir=None, time_limit=60, seed=42, verbose=True, return_data=False,
-               db_connection=None, dataset_id=None):
+               db_connection=None, dataset_id=None, use_cache=True, track_experiment=True):
     """
     Run Greedy algorithm for MDVRP problem.
 
@@ -66,9 +70,69 @@ def run_greedy(data_dir=None, time_limit=60, seed=42, verbose=True, return_data=
 
     try:
         # Load data from database or CSV files
+        db_session = None
+        experiment_id = None
+
         if db_connection and dataset_id:
+            # Database mode
+            db_session = db_connection.get_session()
             loader = MDVRPDataLoader()
-            data = loader.load_from_database(db_connection, dataset_id)
+            data = loader.load_from_database(db_connection, dataset_id)  # Fixed: pass db_connection, not db_session
+
+            # Use distance cache if enabled
+            if use_cache:
+                cache = DistanceCache(db_session, dataset_id, data['coordinates'])
+                if cache.is_valid():
+                    if verbose:
+                        print("[INFO] Loading distance matrix from cache...")
+                    dist_matrix = cache.load()
+                    # Convert NumPy array to dict format (solver compatibility)
+                    nodes = data['depots'] + data['customers']
+                    dist_dict = {}
+                    for i, node_i in enumerate(nodes):
+                        dist_dict[node_i] = {}
+                        for j, node_j in enumerate(nodes):
+                            dist_dict[node_i][node_j] = float(dist_matrix[i][j])
+                    data['dist'] = dist_dict
+                    # Build time matrices from cached distance matrix
+                    from src.distance_matrix import DistanceMatrixBuilder
+                    builder = DistanceMatrixBuilder(data['coordinates'], data['vehicle_speed'])
+                    time_matrices = builder.build_time_matrices(nodes, data['vehicles'], dist_matrix)
+                    # Convert time matrices to dict format
+                    T_dict = {}
+                    for vehicle in data['vehicles']:
+                        T_dict[vehicle] = {}
+                        time_matrix = time_matrices[vehicle]
+                        for i, node_i in enumerate(nodes):
+                            T_dict[vehicle][node_i] = {}
+                            for j, node_j in enumerate(nodes):
+                                T_dict[vehicle][node_i][node_j] = float(time_matrix[i][j])
+                    data['T'] = T_dict
+                    if verbose:
+                        print("[INFO] Loaded distance and time matrices from cache")
+                else:
+                    if verbose:
+                        print("[INFO] Computing and caching distance matrix...")
+                    # Build and cache distance matrix
+                    from src.distance_matrix import DistanceMatrixBuilder
+                    builder = DistanceMatrixBuilder(data['coordinates'], data['vehicle_speed'])
+                    nodes = data['depots'] + data['customers']
+                    dist_matrix = builder.build_distance_matrix(nodes)
+                    cache.save(dist_matrix)
+                    if verbose:
+                        print("[INFO] Distance matrix cached for future runs")
+
+            # Create experiment record if tracking enabled
+            if track_experiment:
+                tracker = ExperimentTracker(db_session)
+                experiment_id = tracker.create_experiment({
+                    'dataset_id': dataset_id,
+                    'algorithm': 'Greedy',
+                    'seed': seed
+                })
+                if verbose:
+                    print(f"[INFO] Created experiment_id: {experiment_id}")
+
             # Initialize solver with pre-loaded data
             solver = MDVRPGreedy(
                 depots=data['depots'],
@@ -79,7 +143,7 @@ def run_greedy(data_dir=None, time_limit=60, seed=42, verbose=True, return_data=
                 seed=seed
             )
         else:
-            # Initialize Greedy solver with data source
+            # CSV mode
             solver = MDVRPGreedy(
                 depots=None, customers=None, vehicles=None, items=None, params=None,
                 data_source=data_dir, seed=seed
@@ -87,6 +151,92 @@ def run_greedy(data_dir=None, time_limit=60, seed=42, verbose=True, return_data=
 
         # Solve the problem
         solution, status = solver.solve(time_limit=time_limit, verbose=False)
+
+        # Save results to database if in database mode
+        if db_connection and dataset_id and track_experiment and experiment_id:
+            try:
+                if verbose:
+                    print(f"[DEBUG] Attempting to save result metrics for experiment {experiment_id}")
+                    print(f"[DEBUG] Solution keys: {list(solution.keys())}")
+                    print(f"[DEBUG] Runtime: {solution.get('runtime', 'NOT FOUND')}")
+
+                tracker.save_result_metrics(experiment_id, {'runtime': solution['runtime']})
+                if verbose:
+                    print(f"[INFO] Saved result metrics to database (experiment_id: {experiment_id})")
+            except Exception as e:
+                print(f"[ERROR] Failed to save result metrics: {e}")
+                import traceback
+                traceback.print_exc()
+
+            # Save routes properly (separate from result_metrics)
+            try:
+                if 'routes' in solution and solution['routes']:
+                    if verbose:
+                        print(f"[DEBUG] Found routes in solution: {list(solution['routes'].keys())}")
+                        for vehicle_id, route_info in solution['routes'].items():
+                            nodes = route_info.get('nodes', [])
+                            if verbose:
+                                print(f"[DEBUG] Vehicle {vehicle_id}: nodes = {nodes}")
+
+                    for vehicle_id, route_info in solution['routes'].items():
+                        nodes = route_info.get('nodes', [])
+                        depot = solution['depot_for_vehicle'][vehicle_id]
+
+                        if not nodes or all(n is None for n in nodes):
+                            # Empty route - depot to depot
+                            if verbose:
+                                print(f"[DEBUG] Saving empty route for {vehicle_id}: {depot} -> {depot}")
+                            tracker.db_session.execute(text("""
+                                INSERT INTO routes (experiment_id, vehicle_id, node_start_id, node_end_id, total_distance, travel_time)
+                                VALUES (:exp_id, :vehicle, :start, :end, :dist, :time)
+                            """), {
+                                'exp_id': experiment_id,
+                                'vehicle': vehicle_id,
+                                'start': depot,
+                                'end': depot,
+                                'dist': 0.0,
+                                'time': 0.0
+                            })
+                        else:
+                            # Build route segments: depot → C1 → C2 → ... → depot
+                            # Filter out None values
+                            nodes = [n for n in nodes if n is not None]
+                            all_nodes = [depot] + nodes + [depot]
+
+                            if verbose:
+                                print(f"[DEBUG] Saving route for {vehicle_id}: {' -> '.join(all_nodes)}")
+
+                            for i in range(len(all_nodes) - 1):
+                                tracker.db_session.execute(text("""
+                                    INSERT INTO routes (experiment_id, vehicle_id, node_start_id, node_end_id, total_distance, travel_time)
+                                    VALUES (:exp_id, :vehicle, :start, :end, :dist, :time)
+                                """), {
+                                    'exp_id': experiment_id,
+                                    'vehicle': vehicle_id,
+                                    'start': all_nodes[i],
+                                    'end': all_nodes[i + 1],
+                                    'dist': float(route_info.get('distance', 0.0)),
+                                    'time': float(route_info.get('time', 0.0))
+                                })
+
+                    # Commit all route inserts
+                    tracker.db_session.commit()
+                    if verbose:
+                        print(f"[INFO] Saved routes to database (experiment_id: {experiment_id})")
+                else:
+                    if verbose:
+                        print(f"[WARNING] No routes found in solution!")
+            except Exception as e:
+                print(f"[ERROR] Failed to save routes: {e}")
+                import traceback
+                traceback.print_exc()
+                try:
+                    tracker.db_session.rollback()
+                except:
+                    pass
+            else:
+                if verbose:
+                    print(f"[INFO] Saved results to database (experiment_id: {experiment_id})")
 
         # Print detailed results if verbose
         if verbose:
@@ -173,17 +323,69 @@ def save_solution(solution, status, problem_data=None, output_dir=None, time_lim
 
 
 if __name__ == "__main__":
-    # Setup data source (database → CSV fallback)
-    db_connection, dataset_id, source_type = setup_data_source()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description='Run Greedy algorithm for MDVRP',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run with CSV files (default)
+  python run_greedy.py
+
+  # Run with database
+  python run_greedy.py --dataset 1
+
+  # Run with custom database URL
+  python run_greedy.py --dataset 1 --db-url postgresql://user:pass@localhost:5432/mdvrp
+
+  # Run with custom time limit
+  python run_greedy.py --time-limit 120
+        """
+    )
+
+    parser.add_argument('--dataset', '-d', type=int,
+                       help='Dataset ID to load from database')
+    parser.add_argument('--db-url', type=str,
+                       help='Database URL (overrides DATABASE_URL)')
+    parser.add_argument('--time-limit', '-t', type=int, default=60,
+                       help='Time limit in seconds (default: 60)')
+    parser.add_argument('--seed', '-s', type=int, default=42,
+                       help='Random seed (default: 42)')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                       help='Reduce verbosity')
+
+    args = parser.parse_args()
+
+    # Setup data source
+    if args.dataset:
+        # Database mode requested
+        db_url = args.db_url
+        db_connection = DatabaseConnection(db_url) if db_url else DatabaseConnection()
+
+        # Validate dataset exists
+        if not db_connection.dataset_exists(args.dataset):
+            print(f"[ERROR] Dataset {args.dataset} not found in database")
+            print(f"        Please check the dataset_id or populate the database first")
+            exit(1)
+
+        dataset_id = args.dataset
+        source_type = 'database'
+        print(f"[INFO] Using database: dataset_id = {dataset_id}")
+    else:
+        # Use environment-based setup or CSV fallback
+        db_connection, dataset_id, source_type = setup_data_source()
 
     # Configuration
     config = {
-        'time_limit': 60,
-        'seed': 42,
-        'verbose': True,
+        'time_limit': args.time_limit,
+        'seed': args.seed,
+        'verbose': not args.quiet,
         'return_data': True,
         'db_connection': db_connection,
-        'dataset_id': dataset_id
+        'dataset_id': dataset_id,
+        'use_cache': True,
+        'track_experiment': True
     }
 
     # Run Greedy

@@ -16,11 +16,15 @@ sys.path.insert(0, parent_dir)
 from algorithms.milp import MDVRP
 from src.exporter import MDVRPExporter
 from src.data_loader import MDVRPDataLoader
+from src.database import DatabaseConnection
+from src.distance_cache import DistanceCache
+from src.experiment_tracker import ExperimentTracker
+from sqlalchemy import text
 from run_config import setup_data_source, cleanup_database_connection
 
 
 def run_milp(data_dir=None, time_limit=300, mip_gap=0.01, verbose=True, return_data=False,
-             db_connection=None, dataset_id=None):
+             db_connection=None, dataset_id=None, use_cache=True, track_experiment=True):
     """
     Run MILP algorithm for MDVRP problem using Gurobi.
 
@@ -66,16 +70,56 @@ def run_milp(data_dir=None, time_limit=300, mip_gap=0.01, verbose=True, return_d
 
     try:
         # Load data from database or CSV files
+        db_session = None
+        experiment_id = None
+
         if db_connection and dataset_id:
+            # Database mode
+            db_session = db_connection.get_session()
             loader = MDVRPDataLoader()
-            data = loader.load_from_database(db_connection, dataset_id)
+            data = loader.load_from_database(db_connection, dataset_id)  # Fixed: pass db_connection, not db_session
+
+            # Use distance cache if enabled
+            if use_cache:
+                cache = DistanceCache(db_session, dataset_id, data['coordinates'])
+                if cache.is_valid():
+                    if verbose:
+                        print("[INFO] Loading distance matrix from cache...")
+                    dist_matrix = cache.load()
+                    # Add distance matrix to params
+                    data['dist'] = dist_matrix
+                else:
+                    if verbose:
+                        print("[INFO] Computing and caching distance matrix...")
+                    # Build and cache distance matrix before solving
+                    from src.distance_matrix import DistanceMatrixBuilder
+                    builder = DistanceMatrixBuilder(data['coordinates'], data['vehicle_speed'])
+                    nodes = data['depots'] + data['customers']
+                    dist_matrix = builder.build_distance_matrix(nodes)
+                    data['dist'] = dist_matrix
+                    # Save to cache
+                    cache.save(dist_matrix)
+                    if verbose:
+                        print("[INFO] Distance matrix cached for future runs")
+
+            # Create experiment record if tracking enabled
+            if track_experiment:
+                tracker = ExperimentTracker(db_session)
+                experiment_id = tracker.create_experiment({
+                    'dataset_id': dataset_id,
+                    'algorithm': 'MILP',
+                    'seed': None  # MILP doesn't use seed
+                })
+                if verbose:
+                    print(f"[INFO] Created experiment_id: {experiment_id}")
+
             # Initialize solver with pre-loaded data
             solver = MDVRP(
                 depots=data['depots'], customers=data['customers'],
                 vehicles=data['vehicles'], items=data['items'], params=data
             )
         else:
-            # Initialize MILP solver with data source
+            # CSV mode
             solver = MDVRP(
                 depots=None, customers=None, vehicles=None, items=None, params=None,
                 data_source=data_dir
@@ -92,6 +136,64 @@ def run_milp(data_dir=None, time_limit=300, mip_gap=0.01, verbose=True, return_d
         # Add depot_for_vehicle to solution for consistency
         if solution:
             solution['depot_for_vehicle'] = solver.depot_for_vehicle
+
+        # Save results to database if in database mode
+        if db_connection and dataset_id and track_experiment and experiment_id and solution:
+            try:
+                tracker.save_result_metrics(experiment_id, {'runtime': solution['runtime']})
+                if verbose:
+                    print(f"[INFO] Saved result metrics to database (experiment_id: {experiment_id})")
+            except Exception as e:
+                print(f"[ERROR] Failed to save result metrics: {e}")
+                import traceback
+                traceback.print_exc()
+
+            # Save routes properly (separate from result_metrics)
+            try:
+                if 'routes' in solution and solution['routes']:
+                    for vehicle_id, route_info in solution['routes'].items():
+                        nodes = route_info.get('nodes', [])
+
+                        if not nodes:
+                            # Empty route - depot to depot
+                            depot = solution['depot_for_vehicle'][vehicle_id]
+                            tracker.db_session.execute(text("""
+                                INSERT INTO routes (experiment_id, vehicle_id, node_start_id, node_end_id, total_distance, travel_time)
+                                VALUES (:exp_id, :vehicle, :start, :end, :dist, :time)
+                            """), {
+                                'exp_id': experiment_id,
+                                'vehicle': vehicle_id,
+                                'start': depot,
+                                'end': depot,
+                                'dist': 0.0,
+                                'time': 0.0
+                            })
+                        else:
+                            # Build route segments: depot → C1 → C2 → ... → depot
+                            depot = solution['depot_for_vehicle'][vehicle_id]
+                            all_nodes = [depot] + nodes + [depot]
+
+                            for i in range(len(all_nodes) - 1):
+                                tracker.db_session.execute(text("""
+                                    INSERT INTO routes (experiment_id, vehicle_id, node_start_id, node_end_id, total_distance, travel_time)
+                                    VALUES (:exp_id, :vehicle, :start, :end, :dist, :time)
+                                """), {
+                                    'exp_id': experiment_id,
+                                    'vehicle': vehicle_id,
+                                    'start': all_nodes[i],
+                                    'end': all_nodes[i + 1],
+                                    'dist': float(route_info.get('distance', 0.0) / (len(all_nodes) - 1) if len(all_nodes) > 1 else 0.0),
+                                    'time': float(route_info.get('time', 0.0) / (len(all_nodes) - 1) if len(all_nodes) > 1 else 0.0)
+                                })
+
+                    tracker.db_session.commit()
+                    if verbose:
+                        print(f"[INFO] Saved routes to database (experiment_id: {experiment_id})")
+            except Exception as e:
+                print(f"[ERROR] Failed to save routes: {e}")
+                import traceback
+                traceback.print_exc()
+                tracker.db_session.rollback()
 
         # Print detailed results if verbose
         if verbose:
@@ -168,17 +270,66 @@ def save_solution(solution, status, problem_data=None, output_dir=None, time_lim
 
 
 if __name__ == "__main__":
-    # Setup data source (database → CSV fallback)
-    db_connection, dataset_id, source_type = setup_data_source()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description='Run Mixed-Integer Linear Programming (MILP) solver for MDVRP',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run with CSV files (default)
+  python run_milp.py
+
+  # Run with database
+  python run_milp.py --dataset 1
+
+  # Run with custom parameters
+  python run_milp.py --dataset 1 --time-limit 600 --mip-gap 0.005
+        """
+    )
+
+    parser.add_argument('--dataset', '-d', type=int,
+                       help='Dataset ID to load from database')
+    parser.add_argument('--db-url', type=str,
+                       help='Database URL (overrides DATABASE_URL)')
+    parser.add_argument('--time-limit', '-t', type=int, default=300,
+                       help='Time limit in seconds (default: 300)')
+    parser.add_argument('--mip-gap', '-m', type=float, default=0.01,
+                       help='MIP optimality gap (default: 0.01)')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                       help='Reduce verbosity')
+
+    args = parser.parse_args()
+
+    # Setup data source
+    if args.dataset:
+        # Database mode requested
+        db_url = args.db_url
+        db_connection = DatabaseConnection(db_url) if db_url else DatabaseConnection()
+
+        # Validate dataset exists
+        if not db_connection.dataset_exists(args.dataset):
+            print(f"[ERROR] Dataset {args.dataset} not found in database")
+            print(f"        Please check the dataset_id or populate the database first")
+            exit(1)
+
+        dataset_id = args.dataset
+        source_type = 'database'
+        print(f"[INFO] Using database: dataset_id = {dataset_id}")
+    else:
+        # Use environment-based setup or CSV fallback
+        db_connection, dataset_id, source_type = setup_data_source()
 
     # Configuration
     config = {
-        'time_limit': 300,
-        'mip_gap': 0.01,
-        'verbose': True,
+        'time_limit': args.time_limit,
+        'mip_gap': args.mip_gap,
+        'verbose': not args.quiet,
         'return_data': True,
         'db_connection': db_connection,
-        'dataset_id': dataset_id
+        'dataset_id': dataset_id,
+        'use_cache': True,
+        'track_experiment': True
     }
 
     # Run MILP

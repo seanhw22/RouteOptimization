@@ -119,6 +119,7 @@ CREATE TABLE routes (
     node_start_id VARCHAR(50) NOT NULL,
     node_end_id VARCHAR(50) NOT NULL,
     total_distance NUMERIC(8,2),
+    travel_time NUMERIC(8,2),
     FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id),
     FOREIGN KEY (node_start_id) REFERENCES nodes(node_id),
     FOREIGN KEY (node_end_id) REFERENCES nodes(node_id)

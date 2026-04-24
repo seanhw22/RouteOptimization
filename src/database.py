@@ -86,3 +86,55 @@ class DatabaseConnection:
         except Exception as e:
             print(f"Database connection failed: {e}")
             return False
+
+    def dataset_exists(self, dataset_id: int) -> bool:
+        """
+        Check if a dataset exists in the database.
+
+        Args:
+            dataset_id: Dataset identifier to check
+
+        Returns:
+            True if dataset exists, False otherwise
+        """
+        try:
+            with self.get_session() as session:
+                result = session.execute(text("""
+                    SELECT COUNT(*) FROM datasets WHERE dataset_id = :dataset_id
+                """), {'dataset_id': dataset_id}).fetchone()
+                return result[0] > 0
+        except Exception as e:
+            print(f"Error checking dataset existence: {e}")
+            return False
+
+    def get_dataset_info(self, dataset_id: int) -> dict:
+        """
+        Get dataset information.
+
+        Args:
+            dataset_id: Dataset identifier
+
+        Returns:
+            Dictionary with dataset info (name, user_id, created_at, etc.)
+
+        Raises:
+            ValueError: If dataset not found
+        """
+        try:
+            with self.get_session() as session:
+                result = session.execute(text("""
+                    SELECT dataset_id, user_id, name, created_at
+                    FROM datasets WHERE dataset_id = :dataset_id
+                """), {'dataset_id': dataset_id}).fetchone()
+
+                if not result:
+                    raise ValueError(f"Dataset {dataset_id} not found")
+
+                return {
+                    'dataset_id': result[0],
+                    'user_id': result[1],
+                    'name': result[2],
+                    'created_at': result[3]
+                }
+        except Exception as e:
+            raise ValueError(f"Error getting dataset info: {e}")

@@ -1,8 +1,8 @@
--- Populate MDVRP Database with Sample Data
--- This script inserts data from CSV files into the normalized database schema
+-- Populate MDVRP Database with Data Matching CSV Files
+-- This script inserts data EXACTLY matching the CSV files in data/
 --
 -- Usage:
---   psql -U mdvrp -d mdvrp -f database/populate_data.sql
+--   psql -U postgres -d mdvrp_new -f database/populate_data_from_csv.sql
 
 BEGIN;
 
@@ -16,12 +16,20 @@ INSERT INTO datasets (dataset_id, user_id, name, created_at)
 VALUES (1, 1, 'Sample MDVRP Dataset', CURRENT_TIMESTAMP)
 ON CONFLICT (dataset_id) DO NOTHING;
 
--- Insert nodes (coordinates for depots and customers)
+-- Clear existing data for dataset_id=1
+DELETE FROM orders WHERE dataset_id = 1;
+DELETE FROM items WHERE dataset_id = 1;
+DELETE FROM vehicles WHERE dataset_id = 1;
+DELETE FROM customers WHERE dataset_id = 1;
+DELETE FROM depots WHERE dataset_id = 1;
+DELETE FROM nodes WHERE dataset_id = 1;
+
+-- Insert nodes (coordinates for depots and customers) - EXACTLY FROM CSV
 INSERT INTO nodes (node_id, dataset_id, x, y) VALUES
-    -- Depots
+    -- Depots (from data/depots.csv)
     ('D1', 1, -6.104563, 106.940091),
     ('D2', 1, -6.276544, 106.821847),
-    -- Customers
+    -- Customers (from data/customers.csv)
     ('C1', 1, -6.224176, 106.80089),
     ('C2', 1, -6.13793, 106.780949),
     ('C3', 1, -6.350793, 107.193915),
@@ -38,7 +46,7 @@ INSERT INTO depots (depot_id, node_id, dataset_id) VALUES
     ('D2', 'D2', 1)
 ON CONFLICT (depot_id) DO NOTHING;
 
--- Insert customers (reference nodes with deadlines)
+-- Insert customers (reference nodes with deadlines) - EXACTLY FROM CSV
 INSERT INTO customers (customer_id, node_id, dataset_id, deadline_hours) VALUES
     ('C1', 'C1', 1, 8),
     ('C2', 'C2', 1, 8),
@@ -50,37 +58,37 @@ INSERT INTO customers (customer_id, node_id, dataset_id, deadline_hours) VALUES
     ('C8', 'C8', 1, 8)
 ON CONFLICT (customer_id) DO NOTHING;
 
--- Insert vehicles
+-- Insert vehicles - EXACTLY FROM CSV
 INSERT INTO vehicles (vehicle_id, depot_id, dataset_id, vehicle_type, capacity_kg, max_operational_hrs, speed_kmh) VALUES
     ('V1', 'D1', 1, 'truck', 60, 10, 40),
     ('V2', 'D2', 1, 'truck', 60, 10, 40),
     ('V3', 'D1', 1, 'van', 50, 10, 40)
 ON CONFLICT (vehicle_id) DO NOTHING;
 
--- Insert items
+-- Insert items - EXACTLY FROM CSV
 INSERT INTO items (item_id, dataset_id, weight_kg, expiry_hours) VALUES
-    ('I1', 1, 5.0, 24),
-    ('I2', 1, 3.0, 48)
+    ('I1', 1, 6.41, 100),
+    ('I2', 1, 7.16, 100)
 ON CONFLICT (item_id) DO NOTHING;
 
--- Insert orders
+-- Insert orders - EXACTLY FROM CSV
 INSERT INTO orders (customer_id, item_id, dataset_id, quantity) VALUES
-    ('C1', 'I1', 1, 10),
-    ('C1', 'I2', 1, 5),
-    ('C2', 'I1', 1, 8),
-    ('C2', 'I2', 1, 3),
-    ('C3', 'I1', 1, 15),
-    ('C3', 'I2', 1, 7),
-    ('C4', 'I1', 1, 12),
-    ('C4', 'I2', 1, 4),
-    ('C5', 'I1', 1, 9),
-    ('C5', 'I2', 1, 6),
-    ('C6', 'I1', 1, 11),
-    ('C6', 'I2', 1, 5),
-    ('C7', 'I1', 1, 13),
-    ('C7', 'I2', 1, 8),
-    ('C8', 'I1', 1, 14),
-    ('C8', 'I2', 1, 9)
+    ('C1', 'I1', 1, 1),
+    ('C1', 'I2', 1, 2),
+    ('C2', 'I1', 1, 2),
+    ('C2', 'I2', 1, 1),
+    ('C3', 'I1', 1, 1),
+    ('C3', 'I2', 1, 1),
+    ('C4', 'I1', 1, 2),
+    ('C4', 'I2', 1, 1),
+    ('C5', 'I1', 1, 1),
+    ('C5', 'I2', 1, 1),
+    ('C6', 'I1', 1, 2),
+    ('C6', 'I2', 1, 2),
+    ('C7', 'I1', 1, 1),
+    ('C7', 'I2', 1, 2),
+    ('C8', 'I1', 1, 1),
+    ('C8', 'I2', 1, 1)
 ON CONFLICT DO NOTHING;
 
 COMMIT;
@@ -92,4 +100,4 @@ COMMIT;
 -- SELECT * FROM customers;
 -- SELECT * FROM vehicles;
 -- SELECT * FROM items;
--- SELECT * FROM orders;
+-- SELECT * FROM orders ORDER BY customer_id, item_id;

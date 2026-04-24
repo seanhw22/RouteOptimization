@@ -170,10 +170,13 @@ Examples:
   python run_all.py --all --data-dir /path/to/data
 
   # Run with database
-  python run_all.py --all --database --dataset-id 1
+  python run_all.py --all --dataset 1
+
+  # Run with custom database URL
+  python run_all.py --all --dataset 1 --db-url postgresql://user:pass@localhost:5432/mdvrp
 
   # Run specific algorithm with database
-  python run_all.py --algorithm hga --database --dataset-id 2
+  python run_all.py --algorithm hga --dataset 2
 
   # Run without verbose output
   python run_all.py --all --quiet
@@ -184,9 +187,9 @@ Examples:
                        help='Run specific algorithm (default: run all)')
     parser.add_argument('--all', action='store_true', help='Run all algorithms')
     parser.add_argument('--data-dir', '-d', default=None, help='Path to data directory (default: ../data)')
+    parser.add_argument('--dataset', '-ds', type=int, help='Dataset ID to load from database')
+    parser.add_argument('--db-url', type=str, help='Database URL (overrides DATABASE_URL)')
     parser.add_argument('--quiet', '-q', action='store_true', help='Reduce verbosity')
-    parser.add_argument('--database', '-db', action='store_true', help='Use database instead of CSV files')
-    parser.add_argument('--dataset-id', '-did', type=int, default=None, help='Dataset ID to load from database')
 
     args = parser.parse_args()
 
@@ -194,17 +197,23 @@ Examples:
     verbose = not args.quiet
 
     # Setup data source
+    from src.database import DatabaseConnection
     from run_config import load_env_config, setup_data_source
     db_connection, dataset_id, data_dir = None, None, None
 
-    if args.database:
+    if args.dataset:
         # Explicit database mode from command line
-        dataset_id = args.dataset_id if args.dataset_id is not None else load_env_config()['dataset_id']
-        db_connection, dataset_id, source_type = setup_data_source(dataset_id)
-        if source_type != 'database':
-            print("[ERROR] --database flag specified but database connection failed!")
-            print("       Fix DATABASE_URL in .env or remove --database flag for auto-fallback")
+        db_url = args.db_url
+        db_connection = DatabaseConnection(db_url) if db_url else DatabaseConnection()
+
+        # Validate dataset exists
+        if not db_connection.dataset_exists(args.dataset):
+            print(f"[ERROR] Dataset {args.dataset} not found in database")
+            print(f"        Please check the dataset_id or populate the database first")
             exit(1)
+
+        dataset_id = args.dataset
+        print(f"[INFO] Using database: dataset_id = {dataset_id}")
     elif args.data_dir:
         # Explicit CSV mode from command line
         data_dir = args.data_dir
