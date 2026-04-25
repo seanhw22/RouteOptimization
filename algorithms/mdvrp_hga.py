@@ -61,39 +61,10 @@ class MDVRPHGA:
         self.seed = seed
         self.data_source = data_source
 
-        # Load data from CSV/XLSX if provided
-        if data_source is not None:
-            from src.data_loader import MDVRPDataLoader
-            from src.distance_matrix import DistanceMatrixBuilder
-
-            loader = MDVRPDataLoader()
-            if os.path.isdir(data_source):
-                data = loader.load_csv(data_source)
-            elif data_source.endswith('.xlsx'):
-                data = loader.load_xlsx(data_source)
-            else:
-                raise ValueError(f"Unsupported data source format: {data_source}")
-
-            # Extract data
-            depots = data['depots']
-            customers = data['customers']
-            vehicles = data['vehicles']
-            items = data['items']
-
-            # Build matrices using NumPy
-            builder = DistanceMatrixBuilder(
-                data['coordinates'],
-                data['vehicle_speed']
-            )
-            params = builder.build_all_matrices(
-                depots, customers, vehicles, items,
-                data['coordinates'], data['vehicle_speed'],
-                data['customer_orders'], data['item_weights'],
-                data['vehicle_capacity'], data['max_operational_time'],
-                data['customer_deadlines'], data['depot_for_vehicle']
-            )
-            # Merge with original params
-            params.update({k: v for k, v in data.items() if k not in params})
+        from src.solver_base import load_solver_data
+        depots, customers, vehicles, items, params = load_solver_data(
+            data_source, depots, customers, vehicles, items, params
+        )
 
         self.depots = depots
         self.customers = customers
@@ -672,37 +643,16 @@ class MDVRPHGA:
         return None
 
     def _calculate_route_distance(self, vehicle: str, route: List) -> float:
-        """Calculate total distance for a route"""
-        if not route:
-            return 0.0
-
-        # Filter out None values from route
-        route = [c for c in route if c is not None]
-
-        if not route:
-            return 0.0
-
-        depot = self.depot_for_vehicle[vehicle]
-
-        if self.uses_numpy:
-            # Use NumPy arrays
-            indices = [self.node_to_idx[depot]]
-            indices.extend(self.node_to_idx[c] for c in route)
-            indices.append(self.node_to_idx[depot])
-
-            total_dist = 0.0
-            for i in range(len(indices) - 1):
-                total_dist += self.dist[indices[i]][indices[i+1]]
-            return total_dist
-        else:
-            # Use dict-based
-            total_dist = 0.0
-            prev = depot
-            for customer in route:
-                total_dist += self.dist[prev][customer]
-                prev = customer
-            total_dist += self.dist[prev][depot]
-            return total_dist
+        """Calculate total distance for a route."""
+        from src.solver_base import calculate_route_distance
+        node_to_idx = self.node_to_idx if self.uses_numpy else None
+        return calculate_route_distance(
+            route,
+            self.depot_for_vehicle[vehicle],
+            self.dist,
+            node_to_idx=node_to_idx,
+            uses_numpy=self.uses_numpy,
+        )
 
     def _calculate_route_time(self, vehicle: str, route: List) -> float:
         """Calculate total travel time for a vehicle's route"""
@@ -1091,22 +1041,3 @@ class MDVRPHGA:
             'vehicle_speed': self.params.get('vehicle_speed', {})
         }
 
-    def solve_legacy(self):
-        """
-        Legacy solve method for backward compatibility.
-        Prints detailed output to console.
-        """
-        solution, status = self.solve(verbose=True)
-
-        # Print routes
-        print("\nRute terbaik untuk setiap kendaraan:")
-        for vehicle, info in solution['routes'].items():
-            depot = self.depot_for_vehicle[vehicle]
-            route = info['nodes']
-            print(f"\nKendaraan {vehicle} (berasal dari Depot {depot}):")
-            print(f"  Rute: {depot} -> {' -> '.join(map(str, route))} -> {depot}")
-            print(f"  Urutan pelanggan: {route}")
-            print(f"  Total beban: {info['load']:.1f} / {self.Q[vehicle]} kg")
-            print(f"  Total jarak: {info['distance']:.2f}")
-
-        return solution

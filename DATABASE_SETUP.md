@@ -100,6 +100,60 @@ export DATABASE_URL="postgresql://user:pass@localhost:5432/mdvrp"
 python your_script.py
 ```
 
+## Distance Caching
+
+1. **First run** — computes distance matrix, saves to `node_distances` table
+2. **Subsequent runs** — loads from cache (50-80% faster data loading)
+3. **Validation** — spot-checks 3 random pairs to ensure cache integrity
+4. **Invalidation** — if coordinates change, delete cache and recompute:
+```sql
+DELETE FROM node_distances WHERE dataset_id = 1;
+```
+
+## Querying Experiments
+
+```sql
+-- Compare runtimes across algorithms
+SELECT
+  algorithm,
+  AVG(r.runtime_id) as avg_runtime,
+  COUNT(*) as num_runs
+FROM experiments e
+LEFT JOIN result_metrics r ON e.experiment_id = r.experiment_id
+GROUP BY algorithm
+ORDER BY avg_runtime;
+
+-- View all experiments with results
+SELECT
+  e.experiment_id,
+  e.algorithm,
+  e.seed,
+  r.runtime_id as runtime_seconds,
+  d.name as dataset_name
+FROM experiments e
+JOIN datasets d ON e.dataset_id = d.dataset_id
+LEFT JOIN result_metrics r ON e.experiment_id = r.experiment_id
+ORDER BY e.experiment_id DESC;
+
+-- Retrieve route segments for an experiment
+SELECT vehicle_id, node_start_id, node_end_id, total_distance
+FROM routes
+WHERE experiment_id = 123
+ORDER BY vehicle_id, route_id;
+```
+
+## Troubleshooting
+
+| Error | Likely cause | Fix |
+|-------|-------------|-----|
+| `password authentication failed` | Wrong credentials in DATABASE_URL | Update `.env` |
+| `database 'mdvrp' does not exist` | DB not created | `CREATE DATABASE mdvrp;` in psql |
+| `relation 'nodes' does not exist` | Schema not applied | Run `database/schema.sql` |
+| `Dataset N not found` | Data not loaded | Run `scripts/populate_database.py` |
+| Slow first run | Distance computation | Normal; subsequent runs use cache |
+
+If PostgreSQL is not running: `docker ps` or `sudo systemctl status postgresql`
+
 ## PostgreSQL Setup (if needed)
 
 ### Windows

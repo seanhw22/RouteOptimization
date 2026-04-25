@@ -31,39 +31,10 @@ class MDVRP:
         data_source : str, optional
             Path to CSV directory or XLSX file for loading data
         """
-        # Load data from CSV/XLSX if provided
-        if data_source is not None:
-            from src.data_loader import MDVRPDataLoader
-            from src.distance_matrix import DistanceMatrixBuilder
-
-            loader = MDVRPDataLoader()
-            if os.path.isdir(data_source):
-                data = loader.load_csv(data_source)
-            elif data_source.endswith('.xlsx'):
-                data = loader.load_xlsx(data_source)
-            else:
-                raise ValueError(f"Unsupported data source format: {data_source}")
-
-            # Extract data
-            depots = data['depots']
-            customers = data['customers']
-            vehicles = data['vehicles']
-            items = data['items']
-
-            # Build matrices using NumPy
-            builder = DistanceMatrixBuilder(
-                data['coordinates'],
-                data['vehicle_speed']
-            )
-            params = builder.build_all_matrices(
-                depots, customers, vehicles, items,
-                data['coordinates'], data['vehicle_speed'],
-                data['customer_orders'], data['item_weights'],
-                data['vehicle_capacity'], data['max_operational_time'],
-                data['customer_deadlines'], data['depot_for_vehicle']
-            )
-            # Merge with original params
-            params.update({k: v for k, v in data.items() if k not in params})
+        from src.solver_base import load_solver_data
+        depots, customers, vehicles, items, params = load_solver_data(
+            data_source, depots, customers, vehicles, items, params
+        )
 
         self.depots = depots
         self.customers = customers

@@ -36,40 +36,10 @@ class MDVRPGreedy:
         self.seed = seed
         self.data_source = data_source
 
-        # Load data from CSV/XLSX if provided
-        if data_source is not None:
-            from src.data_loader import MDVRPDataLoader
-            from src.distance_matrix import DistanceMatrixBuilder
-
-            loader = MDVRPDataLoader()
-            if os.path.isdir(data_source):
-                # It's a directory, load CSV files
-                data = loader.load_csv(data_source)
-            elif data_source.endswith('.xlsx'):
-                data = loader.load_xlsx(data_source)
-            else:
-                raise ValueError(f"Unsupported data source format: {data_source}")
-
-            # Extract data
-            depots = data['depots']
-            customers = data['customers']
-            vehicles = data['vehicles']
-            items = data['items']
-
-            # Build matrices using NumPy
-            builder = DistanceMatrixBuilder(
-                data['coordinates'],
-                data['vehicle_speed']
-            )
-            params = builder.build_all_matrices(
-                depots, customers, vehicles, items,
-                data['coordinates'], data['vehicle_speed'],
-                data['customer_orders'], data['item_weights'],
-                data['vehicle_capacity'], data['max_operational_time'],
-                data['customer_deadlines'], data['depot_for_vehicle']
-            )
-            # Merge with original params
-            params.update({k: v for k, v in data.items() if k not in params})
+        from src.solver_base import load_solver_data
+        depots, customers, vehicles, items, params = load_solver_data(
+            data_source, depots, customers, vehicles, items, params
+        )
 
         self.depots = depots
         self.customers = customers
@@ -164,39 +134,16 @@ class MDVRPGreedy:
         return new_dist - original_dist
 
     def calculate_route_distance(self, vehicle):
-        """
-        Calculate total distance of a vehicle's route
-        Returns: total distance from depot -> customers -> depot
-
-        Supports both dict-based and NumPy array distance matrices.
-        """
-        route = self.routes[vehicle]
-        depot = self.depot_for_vehicle[vehicle]
-
-        if not route:
-            return 0.0
-
-        # Calculate distance: depot -> customer1 -> customer2 -> ... -> depot
-        if self.uses_numpy:
-            # Build node indices list: depot, customers..., depot
-            indices = [self.node_to_idx[depot]]
-            indices.extend(self.node_to_idx[c] for c in route)
-            indices.append(self.node_to_idx[depot])
-
-            # Vectorized distance calculation
-            total_dist = 0.0
-            for i in range(len(indices) - 1):
-                total_dist += self.dist[indices[i]][indices[i+1]]
-        else:
-            # Original dict-based calculation
-            total_dist = 0.0
-            prev_node = depot
-            for customer in route:
-                total_dist += self.dist[prev_node][customer]
-                prev_node = customer
-            total_dist += self.dist[prev_node][depot]
-
-        return total_dist
+        """Calculate total distance of a vehicle's route (depot -> customers -> depot)."""
+        from src.solver_base import calculate_route_distance
+        node_to_idx = self.node_to_idx if self.uses_numpy else None
+        return calculate_route_distance(
+            self.routes[vehicle],
+            self.depot_for_vehicle[vehicle],
+            self.dist,
+            node_to_idx=node_to_idx,
+            uses_numpy=self.uses_numpy,
+        )
 
     def check_capacity_feasibility(self, vehicle, customer):
         """Check if adding customer exceeds vehicle capacity"""
@@ -684,212 +631,6 @@ class MDVRPGreedy:
             'depot_for_vehicle': self.depot_for_vehicle,
             'vehicle_speed': self.params.get('vehicle_speed', {})
         }
-
-    def solve_legacy(self):
-        """
-        Solve MDVRP using cheapest insertion heuristic
-        Algorithm follows the steps:
-        1. Inisialisasi
-        2. Perhitungan biaya penyisipan (dalam iterasi)
-        3. Pemilihan penyisipan terbaik
-        4. Pembaruan rute
-        5. Iterasi (ulang sampai semua pelanggan teralokasi)
-        6. Hasil akhir
-        """
-        print("=" * 70)
-        print("ALGORITMA GREEDY CHEAPEST INSERTION - MDVRP")
-        print("=" * 70)
-
-        # TAHAP 1: INISIALISASI
-        print("\n" + "=" * 70)
-        print("TAHAP 1: INISIALISASI")
-        print("=" * 70)
-        print("\nMembaca seluruh data masukan:")
-        print(f"  - Jumlah depot: {len(self.depots)}")
-        print(f"  - Jumlah pelanggan: {len(self.customers)}")
-        print(f"  - Jumlah kendaraan: {len(self.vehicles)}")
-        print(f"  - Jumlah tipe item: {len(self.items)}")
-
-        print("\nMembuat rute awal untuk setiap kendaraan:")
-        for v in self.vehicles:
-            depot = self.depot_for_vehicle[v]
-            print(f"  - Kendaraan {v}: Depot {depot} -> Depot {depot} (rute kosong)")
-        print(f"  - Rute awal: {self.routes}")
-
-        print("\nHimpunan pelanggan yang belum teralokasi:")
-        print(f"  - Unallocated customers: {self.unallocated}")
-
-        # Iterasi utama
-        iteration = 0
-        while self.unallocated:
-            iteration += 1
-
-            print("\n" + "=" * 70)
-            print(f"ITERASI {iteration}")
-            print("=" * 70)
-            print(f"\nPelanggan yang belum teralokasi: {self.unallocated}")
-
-            # TAHAP 2: PERHITUNGAN BIAYA PENYISIPAN
-            print("\n" + "-" * 70)
-            print("TAHAP 2: PERHITUNGAN BIAYA PENYISIPAN")
-            print("-" * 70)
-            print(f"\nMenghitung biaya penyisipan untuk setiap:")
-            print(f"  - {len(self.unallocated)} pelanggan belum teralokasi")
-            print(f"  - {len(self.vehicles)} kendaraan tersedia")
-            print(f"  - Setiap posisi yang mungkin pada rute")
-
-            print("\nMenguji kendala untuk setiap kandidat penyisipan:")
-            print("  [OK] Kendala kapasitas kendaraan")
-            print("  [OK] Kendala waktu (deadline pelanggan + batas operasional kendaraan)")
-
-            best = self.find_best_insertion(verbose=True)
-
-            if best is None:
-                print("\n  [!] TIDAK ada kandidat penyisipan yang feasible!")
-                print("  Memaksa penyisipan dengan penalti...")
-
-                # Force insert first unallocated customer
-                customer = self.unallocated[0]
-                vehicle, position = self.force_insert_customer(customer, verbose=True)
-
-                # Calculate distance increase for tracking
-                increase = self.calculate_distance_increase(vehicle, customer, position)
-            else:
-                # TAHAP 3: PEMILIHAN PENYISIPAN TERBAIK
-                vehicle, customer, position, increase = best
-                depot = self.depot_for_vehicle[vehicle]
-
-                print(f"\nPenyisipan terbaik dipilih:")
-                print(f"  - Pelanggan: {customer}")
-                print(f"  - Kendaraan: {vehicle} (Depot {depot})")
-                print(f"  - Posisi penyisipan: {position}")
-                print(f"  - Kenaikan jarak terkecil: {increase:.4f}")
-
-                print(f"\nSemua posisi yang dievaluasi untuk kendaraan {vehicle}:")
-            print("\n" + "-" * 70)
-            print("TAHAP 3: PEMILIHAN PENYISIPAN TERBAIK")
-            print("-" * 70)
-
-            vehicle, customer, position, increase = best
-            depot = self.depot_for_vehicle[vehicle]
-
-            print(f"\nPenyisipan terbaik dipilih:")
-            print(f"  - Pelanggan: {customer}")
-            print(f"  - Kendaraan: {vehicle} (Depot {depot})")
-            print(f"  - Posisi penyisipan: {position}")
-            print(f"  - Kenaikan jarak terkecil: {increase:.4f}")
-
-            print(f"\nSemua posisi yang dievaluasi untuk kendaraan {vehicle}:")
-
-            # Show ALL positions that were evaluated for this vehicle
-            route = self.routes[vehicle]
-
-            if len(route) == 0:
-                print(f"  Rute saat ini: {depot} -> {depot} (kosong)")
-                print(f"  Hanya 1 posisi tersedia")
-                print(f"    Posisi 0: {depot} -> {customer} -> {depot}")
-                dist_out = self.dist[depot][customer]
-                dist_return = self.dist[customer][depot]
-                print(f"      Delta: {dist_out:.4f} + {dist_return:.4f} = {dist_out + dist_return:.4f}")
-            else:
-                print(f"  Rute saat ini: {depot} -> {' -> '.join(map(str, route))} -> {depot}")
-                print(f"  {len(route) + 1} posisi dievaluasi:")
-
-                # Position 0: depot -> customer -> route[0]
-                dist_new1 = self.dist[depot][customer]
-                dist_new2 = self.dist[customer][route[0]]
-                dist_orig = self.dist[depot][route[0]]
-                delta_0 = dist_new1 + dist_new2 - dist_orig
-                marker_0 = " <<< TERBAIK" if position == 0 else ""
-                print(f"    Posisi 0 (sisip di awal): {depot} -> {customer} -> {route[0]} -> ...")
-                print(f"      Jarak asli {depot} -> {route[0]}: {dist_orig:.4f}")
-                print(f"      Jarak baru {depot} -> {customer}: {dist_new1:.4f}")
-                print(f"      Jarak baru {customer} -> {route[0]}: {dist_new2:.4f}")
-                print(f"      Delta: ({dist_new1:.4f} + {dist_new2:.4f}) - {dist_orig:.4f} = {delta_0:.4f}{marker_0}")
-
-                # Middle positions
-                for pos in range(1, len(route)):
-                    dist_new1 = self.dist[route[pos-1]][customer]
-                    dist_new2 = self.dist[customer][route[pos]]
-                    dist_orig = self.dist[route[pos-1]][route[pos]]
-                    delta_pos = dist_new1 + dist_new2 - dist_orig
-                    marker_pos = " <<< TERBAIK" if position == pos else ""
-                    print(f"    Posisi {pos} (sisip di tengah): ... -> {route[pos-1]} -> {customer} -> {route[pos]} -> ...")
-                    print(f"      Jarak asli {route[pos-1]} -> {route[pos]}: {dist_orig:.4f}")
-                    print(f"      Jarak baru {route[pos-1]} -> {customer}: {dist_new1:.4f}")
-                    print(f"      Jarak baru {customer} -> {route[pos]}: {dist_new2:.4f}")
-                    print(f"      Delta: ({dist_new1:.4f} + {dist_new2:.4f}) - {dist_orig:.4f} = {delta_pos:.4f}{marker_pos}")
-
-                # Last position: route[-1] -> customer -> depot
-                dist_new1 = self.dist[route[-1]][customer]
-                dist_new2 = self.dist[customer][depot]
-                dist_orig = self.dist[route[-1]][depot]
-                delta_last = dist_new1 + dist_new2 - dist_orig
-                marker_last = " <<< TERBAIK" if position >= len(route) else ""
-                print(f"    Posisi {len(route)} (sisip di akhir): ... -> {route[-1]} -> {customer} -> {depot}")
-                print(f"      Jarak asli {route[-1]} -> {depot}: {dist_orig:.4f}")
-                print(f"      Jarak baru {route[-1]} -> {customer}: {dist_new1:.4f}")
-                print(f"      Jarak baru {customer} -> {depot}: {dist_new2:.4f}")
-                print(f"      Delta: ({dist_new1:.4f} + {dist_new2:.4f}) - {dist_orig:.4f} = {delta_last:.4f}{marker_last}")
-
-            # Show feasibility check results
-            print(f"\nHasil pemeriksaan kendala:")
-            print(f"  [OK] Kapasitas kendaraan {vehicle}: {self.route_load[vehicle]:.1f} + {self.demand[customer]:.1f} = {self.route_load[vehicle] + self.demand[customer]:.1f} <= {self.Q[vehicle]} kg")
-
-            current_time = self.route_time[vehicle]
-            route = self.routes[vehicle]
-
-            if len(route) == 0:
-                arrival_time = self.T[vehicle][depot][customer]
-            else:
-                if position == 0:
-                    arrival_time = self.T[vehicle][depot][customer]
-                elif position >= len(route):
-                    arrival_time = current_time + self.T[vehicle][route[-1]][customer]
-                else:
-                    arrival_time = 0
-                    for i in range(position):
-                        prev_node = depot if i == 0 else route[i-1]
-                        curr_node = route[i]
-                        arrival_time += self.T[vehicle][prev_node][curr_node]
-                    prev_node = depot if position == 0 else route[position-1]
-                    arrival_time += self.T[vehicle][prev_node][customer]
-
-            print(f"  [OK] Waktu kedatangan di customer {customer}: {arrival_time:.4f} <= {self.L[customer]} jam (deadline)")
-            print(f"  [OK] Waktu operasional kendaraan {vehicle}: {current_time + self.calculate_time_increase(vehicle, customer, position):.4f} <= {self.T_max[vehicle]} jam")
-
-            # TAHAP 4: PEMBARUAN RUTE
-            print("\n" + "-" * 70)
-            print("TAHAP 4: PEMBARUAN RUTE")
-            print("-" * 70)
-
-            print(f"\nMelakukan penyisipan pelanggan {customer}...")
-            self.insert_customer(vehicle, customer, position)
-
-            print(f"\nRute kendaraan {vehicle} diperbarui:")
-            print(f"  - Rute baru: {self.routes[vehicle]}")
-            print(f"  - Beban: {self.route_load[vehicle]:.1f}/{self.Q[vehicle]} kg")
-
-            # Calculate and show route distance
-            route_dist = self.calculate_route_distance(vehicle)
-            print(f"  - Jarak tempuh: {route_dist:.4f}")
-
-            print(f"  - Waktu tempuh: {self.route_time[vehicle]:.4f}/{self.T_max[vehicle]} jam")
-
-            print(f"\nPelanggan {customer} dihapus dari himpunan unallocated.")
-            print(f"Sisa pelanggan belum teralokasi: {self.unallocated}")
-
-        # TAHAP 5: ITERASI (implicit - loop continues until all customers allocated)
-
-        # TAHAP 6: HASIL AKHIR
-        print("\n" + "=" * 70)
-        print("TAHAP 6: HASIL AKHIR")
-        print("=" * 70)
-        print("\nSeluruh pelanggan berhasil dialokasikan!")
-        print("\nRute akhir untuk setiap kendaraan:")
-        self.print_solution()
-
-        return self.routes
 
     def print_solution(self):
         """Print final solution"""

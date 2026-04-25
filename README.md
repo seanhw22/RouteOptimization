@@ -43,35 +43,35 @@ Required packages:
 
 ### Option 1: Using CSV Data Files
 
-Place your data in CSV format in a directory (e.g., `data/`):
+Place your data in CSV format in a directory (e.g., `mydata/`):
 
 ```
-data/
+mydata/
 ├── depots.csv       # depot_id, latitude, longitude
-├── customers.csv   # customer_id, latitude, longitude, deadline_hours
-├── vehicles.csv    # vehicle_id, depot_id, capacity_kg, max_time_hours, speed_kmh
-├── orders.csv      # customer_id, item_id, quantity
-└── items.csv       # item_id, weight_kg, expiry_hours
+├── customers.csv    # customer_id, latitude, longitude, deadline_hours
+├── vehicles.csv     # vehicle_id, depot_id, capacity_kg, max_time_hours, speed_kmh
+├── orders.csv       # customer_id, item_id, quantity
+└── items.csv        # item_id, weight_kg, expiry_hours
 ```
 
 Then run any solver:
 
 ```python
-from mdvrp_greedy import MDVRPGreedy
-from mdvrp_hga import MDVRPHGA
-from milp import MDVRP
+from algorithms.mdvrp_greedy import MDVRPGreedy
+from algorithms.mdvrp_hga import MDVRPHGA
+from algorithms.milp import MDVRP
 
 # Greedy solver
 greedy = MDVRPGreedy(
     depots=None, customers=None, vehicles=None, items=None,
-    params=None, seed=42, data_source='data'
+    params=None, seed=42, data_source='mydata'
 )
 solution, status = greedy.solve(verbose=True)
 
 # HGA solver
 hga = MDVRPHGA(
     depots=None, customers=None, vehicles=None, items=None,
-    params=None, seed=42, data_source='data',
+    params=None, seed=42, data_source='mydata',
     population_size=20, generations=20
 )
 solution, status = hga.solve(verbose=True)
@@ -79,7 +79,7 @@ solution, status = hga.solve(verbose=True)
 # MILP solver
 milp = MDVRP(
     depots=None, customers=None, vehicles=None, items=None,
-    params=None, data_source='data'
+    params=None, data_source='mydata'
 )
 milp.build_model()
 solution, status = milp.solve(time_limit=60)
@@ -124,7 +124,7 @@ The `.env` file will be loaded automatically:
 ```python
 from src.data_loader import MDVRPDataLoader
 from src.database import DatabaseConnection
-from mdvrp_greedy import MDVRPGreedy
+from algorithms.mdvrp_greedy import MDVRPGreedy
 
 # Connects using DATABASE_URL from .env file
 conn = DatabaseConnection()
@@ -231,23 +231,17 @@ python individual_runs/run_hga.py --dataset 1 \
   --generations 100 --population-size 100
 
 # Backward compatible: no args = CSV mode
-python individual_runs/run_greedy.py  # Uses data/ directory
+python individual_runs/run_greedy.py  # Uses CSV mode (no database)
 ```
 
 #### Documentation
 
-See [DATABASE_USAGE.md](DATABASE_USAGE.md) for comprehensive database documentation including:
-- Complete setup instructions
-- Data loading procedures
-- Experiment tracking and querying
-- Distance caching behavior
-- Performance benchmarks
-- Troubleshooting guide
+See [DATABASE_SETUP.md](DATABASE_SETUP.md) for complete database documentation including setup, experiment querying, distance caching, and troubleshooting.
 
 ### Option 3: Using Dictionary Parameters (Backward Compatible)
 
 ```python
-from mdvrp_greedy import MDVRPGreedy
+from algorithms.mdvrp_greedy import MDVRPGreedy
 
 # Define problem data manually
 depots = ["D1", "D2"]
@@ -273,17 +267,6 @@ params = {
 
 greedy = MDVRPGreedy(depots, customers, vehicles, items, params)
 solution, status = greedy.solve()
-```
-
-### Option 3: Using Original Scripts
-
-The original test scripts in `small/` directory continue to work:
-
-```bash
-cd small
-python run_small_greedy.py   # Greedy heuristic
-python run_small_hga.py      # Hybrid genetic algorithm
-python run_small_milp.py     # MILP exact solver
 ```
 
 ## Unified Solver Interface
@@ -341,26 +324,32 @@ exporter.export_geojson(solution, coordinates, 'output/solution.geojson')
 
 ```
 .
-├── data/                           # CSV data files
-│   ├── depots.csv
-│   ├── customers.csv
-│   ├── vehicles.csv
-│   ├── orders.csv
-│   └── items.csv
+├── algorithms/                     # Solver implementations
+│   ├── mdvrp_greedy.py            # Greedy heuristic solver
+│   ├── mdvrp_hga.py               # Hybrid genetic algorithm (DEAP)
+│   └── milp.py                    # MILP solver (Gurobi)
 ├── src/                            # Core modules
 │   ├── __init__.py
-│   ├── data_loader.py             # Pandas CSV/XLSX loading
+│   ├── data_loader.py             # Pandas CSV/XLSX/DB loading
+│   ├── database.py                # PostgreSQL connection
+│   ├── distance_cache.py          # Distance caching (DB mode)
 │   ├── distance_matrix.py         # SciPy/NumPy matrix computation
+│   ├── experiment_tracker.py      # Experiment logging (DB mode)
 │   ├── exporter.py                # CSV/PDF/GeoJSON export
+│   ├── solver_base.py             # Shared solver utilities
 │   └── utils.py                   # Helper functions
-├── mdvrp_greedy.py                # Greedy heuristic solver
-├── mdvrp_hga.py                   # Hybrid genetic algorithm (DEAP)
-├── milp.py                         # MILP solver (Gurobi)
-├── small/                          # Test scripts
-│   ├── mdvrp_small.py             # Sample dataset
-│   ├── run_small_greedy.py
-│   ├── run_small_hga.py
-│   └── run_small_milp.py
+├── individual_runs/                # Runner scripts
+│   ├── run_greedy.py
+│   ├── run_hga.py
+│   ├── run_milp.py
+│   └── run_all.py
+├── database/                       # DB schema and seed data
+│   ├── schema.sql
+│   └── populate_data.sql
+├── scripts/                        # Utility scripts
+│   ├── populate_database.py
+│   └── export_experiment.py
+├── .env.example                    # Environment variable template
 ├── requirements.txt                # Python dependencies
 └── README.md                       # This file
 ```
@@ -408,12 +397,10 @@ The refactored implementation provides significant performance improvements:
 
 ## Examples
 
-See `small/` directory for complete examples.
-
 ### Quick Start
 
 ```python
-from mdvrp_greedy import MDVRPGreedy
+from algorithms.mdvrp_greedy import MDVRPGreedy
 
 # Load from CSV and solve
 greedy = MDVRPGreedy(
@@ -426,6 +413,22 @@ print(f"Status: {status}")
 print(f"Total distance: {solution['fitness']:.2f} km")
 print(f"Routes: {solution['routes']}")
 ```
+
+## Reverting to CSV Mode
+
+If you want to stop using the database and return to CSV-only mode:
+
+```bash
+# Simply omit --dataset — all scripts default to CSV mode
+python individual_runs/run_greedy.py
+python individual_runs/run_hga.py
+python individual_runs/run_milp.py
+
+# Or remove the .env file to prevent accidental DB connections
+rm .env
+```
+
+No code changes needed. CSV mode is always the default.
 
 ## License
 
