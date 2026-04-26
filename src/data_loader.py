@@ -6,7 +6,6 @@ Supports CSV, XLSX, and dict-based input (backward compatibility)
 import pandas as pd
 import os
 from typing import Dict, List, Tuple, Union, Optional
-from sqlalchemy import text
 import numpy as np
 
 
@@ -377,130 +376,57 @@ class MDVRPDataLoader:
                 if item not in self.items:
                     raise ValueError(f"Invalid item {item} in order for {customer}")
 
-    def load_from_database(self, db_connection, dataset_id: int) -> Dict:
+    def load_from_database(self, dataset_id: int, db_connection=None) -> Dict:
         """
-        Load MDVRP data from PostgreSQL database.
+        Load MDVRP data from PostgreSQL database via Django ORM.
 
-        Performs JOINs to denormalize data into same format as CSV loading.
-        Returns identical dict structure as load_csv() for compatibility.
+        Returns the same dict structure as load_csv() for solver compatibility.
 
         Args:
-            db_connection: DatabaseConnection object with active session
             dataset_id: ID of dataset to load
+            db_connection: Unused (kept for backward compatibility with old callers)
 
         Returns:
             Dict with same structure as load_csv()
 
         Raises:
-            ValueError: If data validation fails
-            Exception: If database query fails
+            ValueError: If data validation fails or dataset not found
         """
-        # Get database session
-        session = db_connection.get_session()
+        # Lazy import — Django must be set up by caller before this is invoked
+        from datasets.models import Customer, Depot, Item, Order, Vehicle
 
-        try:
-            # Query depots with coordinates (JOIN)
-            depots_query = text("""
-                SELECT d.depot_id, n.x, n.y
-                FROM depots d
-                JOIN nodes n ON d.node_id = n.node_id
-                WHERE d.dataset_id = :dataset_id
-            """)
-            depots_df = pd.read_sql_query(
-                depots_query,
-                db_connection.engine,
-                params={'dataset_id': dataset_id}
-            )
+        depot_qs = Depot.objects.select_related('node').filter(dataset_id=dataset_id)
+        customer_qs = Customer.objects.select_related('node').filter(dataset_id=dataset_id)
+        vehicle_qs = Vehicle.objects.filter(dataset_id=dataset_id)
+        item_qs = Item.objects.filter(dataset_id=dataset_id)
+        order_qs = Order.objects.filter(dataset_id=dataset_id)
 
-            # Query customers with coordinates and deadlines (JOIN)
-            customers_query = text("""
-                SELECT c.customer_id, n.x, n.y, c.deadline_hours
-                FROM customers c
-                JOIN nodes n ON c.node_id = n.node_id
-                WHERE c.dataset_id = :dataset_id
-            """)
-            customers_df = pd.read_sql_query(
-                customers_query,
-                db_connection.engine,
-                params={'dataset_id': dataset_id}
-            )
+        self.depots = [d.depot_id for d in depot_qs]
+        self.customers = [c.customer_id for c in customer_qs]
+        self.vehicles = [v.vehicle_id for v in vehicle_qs]
+        self.items = [it.item_id for it in item_qs]
 
-            # Query vehicles with depot info
-            vehicles_query = text("""
-                SELECT vehicle_id, depot_id, vehicle_type,
-                       capacity_kg, max_operational_hrs, speed_kmh
-                FROM vehicles
-                WHERE dataset_id = :dataset_id
-            """)
-            vehicles_df = pd.read_sql_query(
-                vehicles_query,
-                db_connection.engine,
-                params={'dataset_id': dataset_id}
-            )
+        if not self.depots:
+            raise ValueError(f"Dataset {dataset_id} has no depots (or does not exist)")
 
-            # Query items
-            items_query = text("""
-                SELECT item_id, weight_kg, expiry_hours
-                FROM items
-                WHERE dataset_id = :dataset_id
-            """)
-            items_df = pd.read_sql_query(
-                items_query,
-                db_connection.engine,
-                params={'dataset_id': dataset_id}
-            )
-
-            # Query orders (need to join to customers to filter by dataset)
-            orders_query = text("""
-                SELECT o.customer_id, o.item_id, o.quantity
-                FROM orders o
-                JOIN customers c ON o.customer_id = c.customer_id
-                WHERE c.dataset_id = :dataset_id
-            """)
-            orders_df = pd.read_sql_query(
-                orders_query,
-                db_connection.engine,
-                params={'dataset_id': dataset_id}
-            )
-
-        finally:
-            session.close()
-
-        # Process data identically to CSV loading
-        self.depots = depots_df['depot_id'].tolist()
-        self.customers = customers_df['customer_id'].tolist()
-        self.vehicles = vehicles_df['vehicle_id'].tolist()
-        self.items = items_df['item_id'].tolist()
-
-        # Build coordinates
         coordinates = {}
-        for _, row in depots_df.iterrows():
-            coordinates[row['depot_id']] = (row['x'], row['y'])
-        for _, row in customers_df.iterrows():
-            coordinates[row['customer_id']] = (row['x'], row['y'])
+        for d in depot_qs:
+            coordinates[d.depot_id] = (d.node.x, d.node.y)
+        for c in customer_qs:
+            coordinates[c.customer_id] = (c.node.x, c.node.y)
 
-        # Build vehicle attributes
-        vehicle_speed = vehicles_df.set_index('vehicle_id')['speed_kmh'].to_dict()
-        depot_for_vehicle = vehicles_df.set_index('vehicle_id')['depot_id'].to_dict()
-        vehicle_capacity = vehicles_df.set_index('vehicle_id')['capacity_kg'].to_dict()
-        max_operational_time = vehicles_df.set_index('vehicle_id')['max_operational_hrs'].to_dict()
+        vehicle_speed = {v.vehicle_id: float(v.speed_kmh) for v in vehicle_qs}
+        depot_for_vehicle = {v.vehicle_id: v.depot_id for v in vehicle_qs}
+        vehicle_capacity = {v.vehicle_id: float(v.capacity_kg) for v in vehicle_qs}
+        max_operational_time = {v.vehicle_id: float(v.max_operational_hrs) for v in vehicle_qs}
+        customer_deadlines = {c.customer_id: c.deadline_hours for c in customer_qs}
+        item_weights = {it.item_id: float(it.weight_kg) for it in item_qs}
+        item_expiry = {it.item_id: it.expiry_hours for it in item_qs}
 
-        # Build customer attributes
-        customer_deadlines = customers_df.set_index('customer_id')['deadline_hours'].to_dict()
+        customer_orders: Dict[str, Dict[str, int]] = {c: {} for c in self.customers}
+        for o in order_qs:
+            customer_orders[o.customer_id][o.item_id] = o.quantity
 
-        # Build item attributes
-        item_weights = items_df.set_index('item_id')['weight_kg'].to_dict()
-        item_expiry = items_df.set_index('item_id')['expiry_hours'].to_dict()
-
-        # Build customer orders (nested dict)
-        customer_orders = {}
-        for customer in self.customers:
-            customer_orders[customer] = {}
-            customer_orders_df = orders_df[orders_df['customer_id'] == customer]
-            for _, row in customer_orders_df.iterrows():
-                customer_orders[customer][row['item_id']] = row['quantity']
-
-        # Validate using existing validation method
         self._validate_data(
             coordinates, vehicle_speed, depot_for_vehicle,
             vehicle_capacity, max_operational_time, customer_deadlines,

@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% block title %}Live Run · Batch #{{ batch.id }} · MDVRP{% endblock %}
+{% block content %}
+<section>
+    <header class="row spread">
+        <div>
+            <h1>Run <small class="muted">#{{ batch.id }}</small></h1>
+            <p class="muted">Dataset: {{ batch.dataset.name }}</p>
+        </div>
+        <span class="badge" id="batch-badge">running</span>
+    </header>
+
+    <div class="cards" id="experiment-cards">
+        {% for exp in experiments %}
+        <div class="card" id="card-{{ exp.experiment_id }}">
+            <div class="card-header row spread">
+                <h2>{{ exp.algorithm }}</h2>
+                <span class="badge status-badge {{ exp.status }}" id="badge-{{ exp.experiment_id }}">{{ exp.status }}</span>
+            </div>
+
+            <div class="progress-wrap">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="fill-{{ exp.experiment_id }}" style="width:0%"></div>
+                </div>
+                <span class="progress-label" id="pct-{{ exp.experiment_id }}">0%</span>
+            </div>
+
+            <dl class="card-meta">
+                <dt>Best</dt><dd id="best-{{ exp.experiment_id }}">—</dd>
+                <dt>Elapsed</dt><dd id="elapsed-{{ exp.experiment_id }}">0s</dd>
+            </dl>
+
+            <pre class="log-tail" id="log-{{ exp.experiment_id }}"></pre>
+
+            {% if exp.algorithm == 'MILP' %}
+            <button class="btn warn skip-milp" id="kill-{{ exp.experiment_id }}"
+                    data-kill-url="{% url 'runs:kill' batch.id exp.experiment_id %}"
+                    style="display:none">
+                Skip MILP
+            </button>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div id="results-cta" style="display:none; margin-top:1.5rem;">
+        <a class="btn primary" href="{% url 'results:dashboard' batch.id %}">View Results</a>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const STATUS_URL = "{% url 'runs:status' batch.id %}";
+    const CSRF = "{{ csrf_token }}";
+    let polling = true;
+
+    function fmt(s) {
+        if (s < 60) return s + 's';
+        return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+    }
+
+    function statusCls(st) {
+        return { pending: 'muted', running: 'info', completed: 'ok', killed: 'warn', failed: 'err', interrupted: 'warn' }[st] || '';
+    }
+
+    function updateCard(exp) {
+        const badge = document.getElementById('badge-' + exp.experiment_id);
+        if (badge) { badge.textContent = exp.status; badge.className = 'badge status-badge ' + statusCls(exp.status); }
+
+        const fill = document.getElementById('fill-' + exp.experiment_id);
+        if (fill) fill.style.width = (exp.progress_pct || 0) + '%';
+
+        const pct = document.getElementById('pct-' + exp.experiment_id);
+        if (pct) pct.textContent = (exp.progress_pct || 0) + '%';
+
+        const best = document.getElementById('best-' + exp.experiment_id);
+        if (best) best.textContent = exp.best_objective != null ? exp.best_objective.toFixed(2) : '—';
+
+        const elapsed = document.getElementById('elapsed-' + exp.experiment_id);
+        if (elapsed) elapsed.textContent = fmt(exp.elapsed_seconds || 0);
+
+        const log = document.getElementById('log-' + exp.experiment_id);
+        if (log) log.textContent = (exp.log_tail || []).join('\n');
+
+        const killBtn = document.getElementById('kill-' + exp.experiment_id);
+        if (killBtn) killBtn.style.display = exp.is_terminal ? 'none' : '';
+    }
+
+    function poll() {
+        if (!polling) return;
+        fetch(STATUS_URL)
+            .then(r => r.json())
+            .then(data => {
+                (data.experiments || []).forEach(updateCard);
+                if (data.batch_status && data.batch_status.all_complete) {
+                    polling = false;
+                    document.getElementById('results-cta').style.display = '';
+                    const bb = document.getElementById('batch-badge');
+                    if (bb) { bb.textContent = data.batch_status.status; bb.className = 'badge ok'; }
+                }
+            })
+            .catch(err => console.warn('poll error', err));
+    }
+
+    document.querySelectorAll('.skip-milp').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const url = this.dataset.killUrl;
+            this.disabled = true;
+            fetch(url, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+                .then(r => r.json())
+                .then(d => { if (!d.ok) this.disabled = false; })
+                .catch(() => { this.disabled = false; });
+        });
+    });
+
+    poll();
+    setInterval(poll, 3000);
+})();
+</script>
+{% endblock %}

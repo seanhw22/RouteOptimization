@@ -17,6 +17,45 @@ All solvers now support:
 - **tqdm** progress tracking
 - **Multiple export formats** (CSV, PDF, GeoJSON)
 
+## Web Application (Django)
+
+The project ships a full Django web application for uploading datasets, running solvers, and viewing results.
+
+### Quick Start
+
+**Prerequisites:** Python 3.11+, PostgreSQL running locally, `.env` file with `DATABASE_URL`.
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Configure environment
+#    Create .env at repo root:
+#    DATABASE_URL=postgresql://user:password@localhost:5432/mdvrp
+#    SECRET_KEY=your-secret-key
+#    DEBUG=True
+
+# 3. Apply migrations (creates all tables)
+python manage.py migrate
+
+# 4. Start the development server
+python manage.py runserver
+```
+
+Open [http://localhost:8000](http://localhost:8000) — register an account (or continue as guest), upload a dataset (XLSX or 5 CSVs), configure and launch solvers, then view live progress and results.
+
+### Management Commands
+
+```bash
+# Clean up expired guest datasets
+python manage.py cleanup_expired_datasets
+
+# Collect static files (production)
+python manage.py collectstatic
+```
+
+---
+
 ## Installation
 
 ### Requirements
@@ -26,18 +65,18 @@ pip install -r requirements.txt
 ```
 
 Required packages:
+- `django>=5.2` - Web framework
+- `psycopg2-binary>=2.9.0` - PostgreSQL driver
 - `numpy>=2.4.4` - Numerical computing
 - `gurobipy>=12.0.3` - MILP solver
 - `deap>=1.4.1` - Genetic algorithm framework
 - `pandas>=2.0.0` - Data manipulation
 - `scipy>=1.11.0` - Scientific computing
 - `tqdm>=4.66.0` - Progress bars
-- `openpyxl>=3.1.0` - Excel support
+- `openpyxl>=3.1.0` - Excel / XLSX support
 - `reportlab>=4.0.0` - PDF generation
 - `geojson>=3.1.0` - GeoJSON export
 - `matplotlib>=3.8.0` - Plotting (optional)
-- `sqlalchemy>=2.0.0` - Database ORM (for PostgreSQL)
-- `psycopg2-binary>=2.9.0` - PostgreSQL driver
 
 ## Usage
 

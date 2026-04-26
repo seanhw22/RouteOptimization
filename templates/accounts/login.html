@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Sign in · MDVRP{% endblock %}
+{% block content %}
+<section class="card">
+    <h1>Sign in</h1>
+    <form method="post">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="formerrors">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="field">
+            <label for="id_email">Email</label>
+            {{ form.email }}
+            {{ form.email.errors }}
+        </div>
+        <div class="field">
+            <label for="id_password">Password</label>
+            {{ form.password }}
+            {{ form.password.errors }}
+        </div>
+        <button type="submit" class="primary">Sign in</button>
+    </form>
+    <p class="muted">No account? <a href="{% url 'accounts:register' %}">Register</a> or <a href="{% url 'accounts:guest' %}">continue as guest</a>.</p>
+</section>
+{% endblock %}

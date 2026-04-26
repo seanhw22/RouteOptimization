@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+{% block title %}Results · Batch #{{ batch.id }} · MDVRP{% endblock %}
+{% block content %}
+<section>
+    <header class="row spread">
+        <div>
+            <h1>Results <small class="muted">#{{ batch.id }}</small></h1>
+            <p class="muted">{{ batch.dataset.name }}</p>
+        </div>
+        <a class="btn" href="{% url 'runs:viewer' batch.id %}">Back to run</a>
+    </header>
+
+    {% if days_remaining is not None %}
+    <div class="banner warn">
+        <strong>Guest session:</strong> your dataset expires in {{ days_remaining }} day{{ days_remaining|pluralize }}.
+        <a href="{% url 'accounts:register' %}">Register</a> to keep it permanently.
+    </div>
+    {% endif %}
+
+    <!-- Algorithm tabs -->
+    <div class="tabs" role="tablist">
+        {% for item in algo_items %}
+        <button class="tab-btn {% if forloop.first %}active{% endif %}"
+                role="tab"
+                data-tab="{{ item.algorithm }}"
+                aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
+            {{ item.algorithm }}
+            <span class="badge {% if item.status == 'completed' %}ok{% elif item.status == 'running' %}info{% else %}muted{% endif %}">{{ item.status }}</span>
+        </button>
+        {% endfor %}
+    </div>
+
+    {% for item in algo_items %}
+    <div class="tab-panel" id="tab-{{ item.algorithm }}" role="tabpanel"
+         {% if not forloop.first %}style="display:none"{% endif %}>
+        {% if item.status == 'completed' %}
+        <div class="row spread" style="margin-bottom:1rem">
+            <p class="muted">
+                Total distance: <strong>{{ item.total_distance }} km</strong>
+                {% if item.best_objective %} · Best objective: <strong>{{ item.best_objective|floatformat:2 }}</strong>{% endif %}
+            </p>
+            <div class="btn-group">
+                <a class="btn" href="{% url 'results:download_csv' batch.id item.experiment_id %}">CSV</a>
+                <a class="btn" href="{% url 'results:download_pdf' batch.id item.experiment_id %}">PDF</a>
+                <a class="btn" href="{% url 'results:download_geojson' batch.id item.experiment_id %}">GeoJSON</a>
+            </div>
+        </div>
+
+        <h2>Route Map</h2>
+        <div id="map-{{ item.algorithm }}" class="leaflet-map"></div>
+
+        <h2>Route Statistics</h2>
+        {% if item.routes %}
+        <table class="data">
+            <thead>
+                <tr><th>Vehicle</th><th>Stops</th><th>Distance (km)</th><th>Time (h)</th><th>Weight (kg)</th></tr>
+            </thead>
+            <tbody>
+            {% for row in item.routes %}
+            <tr>
+                <td>{{ row.vehicle_id }}</td>
+                <td class="stops">{{ row.stops }}</td>
+                <td>{{ row.distance }}</td>
+                <td>{{ row.time }}</td>
+                <td>{{ row.weight }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="muted">No routes stored.</p>
+        {% endif %}
+
+        {% else %}
+        <p class="muted">Experiment status: <strong>{{ item.status }}</strong>. Results only available for completed experiments.</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <h2>Algorithm Comparison</h2>
+    {% if chart_labels != '[]' %}
+    <div style="max-width:600px">
+        <canvas id="comparison-chart"></canvas>
+    </div>
+    {% else %}
+    <p class="muted">No completed experiments to compare yet.</p>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// GeoJSON data per algorithm — | safe prevents Django from HTML-escaping the JSON
+const geojsonData = {};
+{% for item in algo_items %}{% if item.geojson_json != 'null' %}
+geojsonData["{{ item.algorithm }}"] = {{ item.geojson_json | safe }};
+{% endif %}{% endfor %}
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // ---- Leaflet maps (initialized first so maps/bounds are ready for tab handler) ----
+    const maps = {};
+    const layerBounds = {};
+    {% for item in algo_items %}{% if item.status == 'completed' %}
+    (function () {
+        const algo = "{{ item.algorithm }}";
+        const map = L.map('map-' + algo).setView([0, 0], 2);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            maxZoom: 19,
+        }).addTo(map);
+        maps[algo] = map;
+
+        const gj = geojsonData[algo];
+        if (gj) {
+            const layer = L.geoJSON(gj, {
+                style: f => ({
+                    color: f.properties.stroke || '#3388ff',
+                    weight: f.properties['stroke-width'] || 3,
+                    opacity: f.properties['stroke-opacity'] || 0.8,
+                }),
+                pointToLayer: (f, latlng) => {
+                    const isDepot = f.properties.type === 'depot';
+                    return L.circleMarker(latlng, {
+                        radius: isDepot ? 10 : 6,
+                        fillColor: isDepot ? '#2C3E50' : '#27AE60',
+                        color: '#fff',
+                        weight: 1,
+                        fillOpacity: 0.9,
+                    });
+                },
+                onEachFeature: (f, layer) => {
+                    if (f.properties.id) layer.bindPopup(f.properties.id);
+                    else if (f.properties.vehicle_id)
+                        layer.bindPopup('Vehicle ' + f.properties.vehicle_id + ': ' + f.properties.distance_km + ' km');
+                }
+            }).addTo(map);
+            try { layerBounds[algo] = layer.getBounds(); } catch (e) {}
+        }
+    })();
+    {% endif %}{% endfor %}
+
+    // Fit the first (visible) map immediately now that it has correct dimensions
+    (function () {
+        const activeBtn = document.querySelector('.tab-btn.active');
+        if (!activeBtn) return;
+        const algo = activeBtn.dataset.tab;
+        if (maps[algo] && layerBounds[algo]) {
+            maps[algo].fitBounds(layerBounds[algo].pad(0.1));
+        }
+    })();
+
+    // ---- Tab switching ----
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('active');
+                b.setAttribute('aria-selected', 'false');
+            });
+            document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+            this.classList.add('active');
+            this.setAttribute('aria-selected', 'true');
+            const algo = this.dataset.tab;
+            document.getElementById('tab-' + algo).style.display = '';
+            // Delay so the browser finishes layout before Leaflet measures the container
+            if (maps[algo]) {
+                setTimeout(function () {
+                    maps[algo].invalidateSize();
+                    if (layerBounds[algo]) maps[algo].fitBounds(layerBounds[algo].pad(0.1));
+                }, 50);
+            }
+        });
+    });
+
+    // ---- Chart.js comparison ----
+    const chartCanvas = document.getElementById('comparison-chart');
+    if (chartCanvas) {
+        new Chart(chartCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: {{ chart_labels | safe }},
+                datasets: [{
+                    label: 'Total Distance (km)',
+                    data: {{ chart_values }},
+                    backgroundColor: ['#4ECDC4', '#FF6B6B', '#45B7D1'],
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, title: { display: true, text: 'km' } } }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Upload dataset · MDVRP{% endblock %}
+{% block content %}
+<section class="card">
+    <h1>Upload dataset</h1>
+    <p class="muted">Provide either a single XLSX with five named sheets, or all five CSVs.
+        Required columns:
+        <code>depots(depot_id,x,y)</code>,
+        <code>customers(customer_id,x,y,deadline_hours)</code>,
+        <code>vehicles(vehicle_id,depot_id,vehicle_type,capacity_kg,max_operational_hrs,speed_kmh)</code>,
+        <code>items(item_id,weight_kg,expiry_hours)</code>,
+        <code>orders(customer_id,item_id,quantity)</code>.</p>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="formerrors">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="field">
+            <label for="id_name">Dataset name</label>
+            {{ form.name }}{{ form.name.errors }}
+        </div>
+
+        <h2>Option A: single XLSX</h2>
+        <div class="field"><label for="id_xlsx">XLSX file</label>{{ form.xlsx }}{{ form.xlsx.errors }}</div>
+
+        <h2>Option B: five CSVs</h2>
+        {% for f in form %}{% if f.name|slice:"-4:" == "_csv" %}
+        <div class="field"><label for="{{ f.id_for_label }}">{{ f.label }} ({{ f.help_text }})</label>{{ f }}{{ f.errors }}</div>
+        {% endif %}{% endfor %}
+
+        <button type="submit" class="primary">Upload &amp; preview</button>
+    </form>
+</section>
+{% endblock %}

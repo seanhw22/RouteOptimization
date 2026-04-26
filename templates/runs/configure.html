@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}Configure solver · MDVRP{% endblock %}
+{% block content %}
+<section class="card">
+    <h1>Run solver on “{{ dataset.name }}”</h1>
+    <p class="muted">Total nodes: {{ dataset.node_count }}. MILP {% if milp_available %}available{% else %}disabled (only ≤25 nodes){% endif %}.</p>
+
+    <form method="post">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="formerrors">{{ form.non_field_errors }}</div>{% endif %}
+
+        <fieldset>
+            <legend>Algorithms</legend>
+            <label class="check">{{ form.run_greedy }} {{ form.run_greedy.label }}</label>
+            <label class="check">{{ form.run_hga }} {{ form.run_hga.label }}</label>
+            <label class="check">{{ form.run_milp }} {{ form.run_milp.label }}</label>
+        </fieldset>
+
+        <fieldset>
+            <legend>HGA parameters</legend>
+            <div class="grid">
+                <div class="field"><label>Generations</label>{{ form.generations }}{{ form.generations.errors }}</div>
+                <div class="field"><label>Population size</label>{{ form.population_size }}{{ form.population_size.errors }}</div>
+                <div class="field"><label>Mutation rate</label>{{ form.mutation_rate }}{{ form.mutation_rate.errors }}</div>
+                <div class="field"><label>Crossover rate</label>{{ form.crossover_rate }}{{ form.crossover_rate.errors }}</div>
+                <div class="field"><label>Random seed</label>{{ form.seed }}{{ form.seed.errors }}</div>
+            </div>
+        </fieldset>
+
+        {% if milp_available %}
+        <fieldset>
+            <legend>MILP</legend>
+            <div class="field"><label>Time limit (seconds)</label>{{ form.milp_time_limit }}{{ form.milp_time_limit.errors }}</div>
+        </fieldset>
+        {% endif %}
+
+        <button type="submit" class="primary">Launch run</button>
+        <a class="btn" href="{% url 'datasets:detail' dataset.dataset_id %}">Cancel</a>
+    </form>
+</section>
+{% endblock %}

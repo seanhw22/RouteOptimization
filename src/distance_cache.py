@@ -1,233 +1,88 @@
 """
-Distance matrix caching for MDVRP problems.
-Caches computed node distances in database to avoid redundant calculations.
+Distance matrix caching for MDVRP problems (Django ORM).
+
+Caches computed node distances in the ``node_distances`` table to avoid
+recomputing the matrix for repeated solver runs against the same dataset.
 """
 
 import random
+from typing import Dict, List, Tuple
+
 import numpy as np
-from typing import Dict, Tuple, List, Optional, Any
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 
 
 class DistanceCache:
-    """Handle distance matrix caching with validation"""
+    """Handle distance matrix caching with spot-check validation."""
 
-    def __init__(self, db_session: Session, dataset_id: int, coordinates: Dict[str, Tuple[float, float]]) -> None:
-        """
-        Initialize distance cache.
-
-        Args:
-            db_session: SQLAlchemy database session
-            dataset_id: Dataset identifier for caching
-            coordinates: Dictionary mapping node_id to (x, y) coordinates
-        """
-        self.db_session: Session = db_session
-        self.dataset_id: int = dataset_id
-        self.coordinates: Dict[str, Tuple[float, float]] = coordinates
+    def __init__(self, dataset_id: int, coordinates: Dict[str, Tuple[float, float]], db_session=None) -> None:
+        """``db_session`` is accepted for backward compatibility but ignored."""
+        self.dataset_id = dataset_id
+        self.coordinates = coordinates
         self.nodes: List[str] = list(coordinates.keys())
+        self.db_session = db_session  # unused, kept for older callers
 
     def is_valid(self) -> bool:
-        """
-        Check if cached distances are valid via spot-check validation.
+        """Return True if a usable cache exists for this dataset."""
+        from datasets.models import NodeDistance
 
-        Uses 3 random node pair samples to validate cache integrity.
-        If any sampled pair differs from cached distance by > 0.01,
-        considers cache invalid.
-
-        Returns:
-            True if cache exists and is valid, False otherwise
-        """
-        try:
-            # Check if cache exists
-            count_result = self.db_session.execute(text("""
-                SELECT COUNT(*) FROM node_distances
-                WHERE dataset_id = :dataset_id
-            """), {'dataset_id': self.dataset_id}).fetchone()
-
-            if count_result[0] == 0:
-                return False
-
-            # Spot-check validation: sample 3 random node pairs
-            if len(self.nodes) < 2:
-                return False
-
-            sample_pairs = random.sample(list(self.nodes), min(3, len(self.nodes)))
-            num_samples = len(sample_pairs)
-
-            for i in range(num_samples):
-                for j in range(i + 1, num_samples):
-                    node1, node2 = sample_pairs[i], sample_pairs[j]
-
-                    # Query cached distance
-                    cached_result = self.db_session.execute(text("""
-                        SELECT distance FROM node_distances
-                        WHERE node_start_id = :node1 AND node_end_id = :node2
-                        AND dataset_id = :dataset_id
-                    """), {
-                        'node1': node1,
-                        'node2': node2,
-                        'dataset_id': self.dataset_id
-                    }).fetchone()
-
-                    # Compute actual distance
-                    coord1 = self.coordinates[node1]
-                    coord2 = self.coordinates[node2]
-                    actual_distance = np.sqrt((coord1[0] - coord2[0])**2 + (coord1[1] - coord2[1])**2) * 111
-
-                    # Validate - convert decimal.Decimal to float if needed
-                    if not cached_result or cached_result[0] is None:
-                        return False
-
-                    cached_distance = float(cached_result[0])
-                    if abs(cached_distance - actual_distance) > 0.01:
-                        return False
-
-            return True
-
-        except Exception as e:
-            # If validation fails for any reason, consider cache invalid
-            print(f"Cache validation error: {e}")
+        qs = NodeDistance.objects.filter(dataset_id=self.dataset_id)
+        if not qs.exists():
+            return False
+        if len(self.nodes) < 2:
             return False
 
-    def load(self) -> np.ndarray:
-        """
-        Load distance matrix from cache.
-
-        Returns:
-            Square NumPy array where dist_matrix[i,j] is distance from nodes[i] to nodes[j]
-
-        Raises:
-            ValueError: If cache is empty or invalid
-        """
-        try:
-            # Check if cache exists
-            count_result = self.db_session.execute(text("""
-                SELECT COUNT(*) FROM node_distances
-                WHERE dataset_id = :dataset_id
-            """), {'dataset_id': self.dataset_id}).fetchone()
-
-            if count_result[0] == 0:
-                return False
-
-            # Spot-check validation: sample 3 random node pairs
-            if len(self.nodes) < 2:
-                return False
-
-            sample_pairs = random.sample(list(self.nodes), min(3, len(self.nodes)))
-            num_samples = len(sample_pairs)
-
-            for i in range(num_samples):
-                for j in range(i + 1, num_samples):
-                    node1, node2 = sample_pairs[i], sample_pairs[j]
-
-                    # Query cached distance
-                    cached_result = self.db_session.execute(text("""
-                        SELECT distance FROM node_distances
-                        WHERE node_start_id = :node1 AND node_end_id = :node2
-                        AND dataset_id = :dataset_id
-                    """), {
-                        'node1': node1,
-                        'node2': node2,
-                        'dataset_id': self.dataset_id
-                    }).fetchone()
-
-                    # Compute actual distance
-                    coord1 = self.coordinates[node1]
-                    coord2 = self.coordinates[node2]
-                    actual_distance = np.sqrt((coord1[0] - coord2[0])**2 + (coord1[1] - coord2[1])**2) * 111
-
-                    # Validate - convert decimal.Decimal to float if needed
-                    if not cached_result or cached_result[0] is None:
-                        return False
-
-                    cached_distance = float(cached_result[0])
-                    if abs(cached_distance - actual_distance) > 0.01:
-                        return False
-
-            return True
-
-        except Exception as e:
-            # If validation fails for any reason, consider cache invalid
-            print(f"Cache validation error: {e}")
-            return False
+        sample = random.sample(self.nodes, min(3, len(self.nodes)))
+        for i in range(len(sample)):
+            for j in range(i + 1, len(sample)):
+                a, b = sample[i], sample[j]
+                row = qs.filter(node_start_id=a, node_end_id=b).first()
+                if row is None or row.distance is None:
+                    return False
+                actual = self._haversine_proxy(self.coordinates[a], self.coordinates[b])
+                if abs(float(row.distance) - actual) > 0.01:
+                    return False
+        return True
 
     def load(self) -> np.ndarray:
-        """
-        Load distance matrix from cache.
+        """Load the cached distance matrix as a square NumPy array."""
+        from datasets.models import NodeDistance
 
-        Returns:
-            Square NumPy array where dist_matrix[i,j] is distance from nodes[i] to nodes[j]
+        rows = NodeDistance.objects.filter(dataset_id=self.dataset_id).values_list(
+            'node_start_id', 'node_end_id', 'distance'
+        )
+        if not rows:
+            raise ValueError(f"No cached distances for dataset_id={self.dataset_id}")
 
-        Raises:
-            ValueError: If cache is empty or invalid
-        """
-        try:
-            # Query all distances for this dataset
-            result = self.db_session.execute(text("""
-                SELECT node_start_id, node_end_id, distance
-                FROM node_distances
-                WHERE dataset_id = :dataset_id
-            """), {'dataset_id': self.dataset_id}).fetchall()
+        n = len(self.nodes)
+        index = {node: i for i, node in enumerate(self.nodes)}
+        matrix = np.zeros((n, n))
+        for start, end, dist in rows:
+            if start in index and end in index and dist is not None:
+                matrix[index[start], index[end]] = float(dist)
+        return matrix
 
-            if not result:
-                raise ValueError(f"No cached distances found for dataset_id={self.dataset_id}")
+    def save(self, dist_matrix: np.ndarray) -> None:
+        """Replace any existing cache and persist the new distance matrix."""
+        from datasets.models import NodeDistance
+        from django.db import transaction
 
-            # Build distance matrix
-            n = len(self.nodes)
-            dist_matrix = np.zeros((n, n))
+        with transaction.atomic():
+            NodeDistance.objects.filter(dataset_id=self.dataset_id).delete()
+            objs = []
+            for i, a in enumerate(self.nodes):
+                for j, b in enumerate(self.nodes):
+                    if i == j:
+                        continue
+                    objs.append(NodeDistance(
+                        dataset_id=self.dataset_id,
+                        node_start_id=a,
+                        node_end_id=b,
+                        distance=float(dist_matrix[i, j]),
+                        travel_time=None,
+                    ))
+            NodeDistance.objects.bulk_create(objs, batch_size=500)
 
-            for row in result:
-                node_start, node_end, distance = row
-                i = self.nodes.index(node_start)
-                j = self.nodes.index(node_end)
-                dist_matrix[i, j] = distance
-
-            return dist_matrix
-
-        except Exception as e:
-            raise ValueError(f"Failed to load cached distances: {e}")
-
-    def save(self, dist_matrix: np.ndarray):
-        """
-        Save distance matrix to cache using batch insert.
-
-        Args:
-            dist_matrix: Square NumPy distance matrix
-
-        Raises:
-            Exception: If database insert fails
-        """
-        try:
-            # Clear existing cache for this dataset
-            self.db_session.execute(text("""
-                DELETE FROM node_distances
-                WHERE dataset_id = :dataset_id
-            """), {'dataset_id': self.dataset_id})
-
-            # Prepare batch insert data
-            insert_data = []
-            n = len(self.nodes)
-
-            for i in range(n):
-                for j in range(n):
-                    if i != j:  # Skip diagonal (distance from node to itself)
-                        insert_data.append({
-                            'node_start_id': self.nodes[i],
-                            'node_end_id': self.nodes[j],
-                            'dataset_id': self.dataset_id,
-                            'distance': float(dist_matrix[i, j]),  # Ensure it's a float
-                            'travel_time': None  # Not used currently
-                        })
-
-            # Batch insert using executemany
-            self.db_session.execute(text("""
-                INSERT INTO node_distances (node_start_id, node_end_id, dataset_id, distance, travel_time)
-                VALUES (:node_start_id, :node_end_id, :dataset_id, :distance, :travel_time)
-            """), insert_data)
-
-            self.db_session.commit()
-
-        except Exception as e:
-            self.db_session.rollback()
-            raise Exception(f"Failed to save distances to cache: {e}")
+    @staticmethod
+    def _haversine_proxy(p1, p2):
+        # The original cache used Euclidean * 111 (km/deg) as a quick proxy
+        return float(np.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) * 111)

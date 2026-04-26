@@ -45,10 +45,6 @@ matplotlib>=3.8.0         # Plotting library (optional)
 # Database Dependencies
 # ====================
 
-# SQLAlchemy - SQL ORM and database abstraction
-# Used for: Database connection management and queries
-sqlalchemy>=2.0.0         # SQL ORM for PostgreSQL support
-
 # psycopg2-binary - PostgreSQL database driver
 # Used for: Connecting to PostgreSQL database
 psycopg2-binary>=2.9.0    # PostgreSQL adapter for Python
@@ -56,3 +52,12 @@ psycopg2-binary>=2.9.0    # PostgreSQL adapter for Python
 # python-dotenv - Environment variable management
 # Used for: Loading DATABASE_URL from .env file (optional)
 python-dotenv>=1.0.0      # Load environment variables from .env file
+
+# Web Framework Dependencies
+# ===========================
+
+# Django - Web framework
+django>=4.2               # Web framework for MDVRP webapp
+
+# Gunicorn - WSGI HTTP server for production deployment
+gunicorn>=21.0            # Production WSGI server

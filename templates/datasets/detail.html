@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}{{ dataset.name }} · Dataset · MDVRP{% endblock %}
+{% block content %}
+<section>
+    <header class="row spread">
+        <div>
+            <h1>{{ dataset.name }} <small class="muted">#{{ dataset.dataset_id }}</small></h1>
+            <p class="muted">
+                Created {{ dataset.created_at|date:"Y-m-d H:i" }}.
+                {% if dataset.expires_at %}<strong>Expires {{ dataset.expires_at|date:"Y-m-d" }}.</strong>{% endif %}
+            </p>
+        </div>
+        <a class="btn primary" href="{% url 'runs:configure' dataset.dataset_id %}">Run solver</a>
+    </header>
+
+    <div class="counters">
+        <div><strong>{{ counts.nodes }}</strong> nodes ({{ counts.depots }} depots + {{ counts.customers }} customers)</div>
+        <div><strong>{{ counts.vehicles }}</strong> vehicles</div>
+        <div><strong>{{ counts.items }}</strong> items</div>
+        <div><strong>{{ counts.orders }}</strong> orders</div>
+        <div>MILP {% if milp_available %}<span class="badge ok">available</span>{% else %}<span class="badge muted">disabled (>25 nodes)</span>{% endif %}</div>
+    </div>
+
+    <h2>Past runs</h2>
+    {% if run_batches %}
+    <table class="data">
+        <thead><tr><th>#</th><th>Status</th><th>Algorithms</th><th>Created</th><th></th></tr></thead>
+        <tbody>
+        {% for batch in run_batches %}
+        <tr>
+            <td>{{ batch.id }}</td>
+            <td><span class="badge {% if batch.status == 'completed' %}ok{% elif batch.status == 'running' %}info{% elif batch.status == 'partial' %}warn{% else %}muted{% endif %}">{{ batch.status }}</span></td>
+            <td>{% for exp in batch.experiments.all %}{{ exp.algorithm }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+            <td>{{ batch.created_at|date:"Y-m-d H:i" }}</td>
+            <td class="btn-group">
+                <a class="btn" href="{% url 'runs:viewer' batch.id %}">View run</a>
+                {% if batch.status == 'completed' or batch.status == 'partial' %}
+                <a class="btn" href="{% url 'results:dashboard' batch.id %}">Results</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No runs yet. <a href="{% url 'runs:configure' dataset.dataset_id %}">Run the solver</a> to get started.</p>
+    {% endif %}
+
+    <h2>Depots</h2>
+    <table class="data"><thead><tr><th>id</th><th>x</th><th>y</th></tr></thead><tbody>
+    {% for d in depots %}<tr><td>{{ d.depot_id }}</td><td>{{ d.node.x }}</td><td>{{ d.node.y }}</td></tr>{% endfor %}
+    </tbody></table>
+
+    <h2>Customers (first 50)</h2>
+    <table class="data"><thead><tr><th>id</th><th>x</th><th>y</th><th>deadline_hours</th></tr></thead><tbody>
+    {% for c in customers %}<tr><td>{{ c.customer_id }}</td><td>{{ c.node.x }}</td><td>{{ c.node.y }}</td><td>{{ c.deadline_hours }}</td></tr>{% endfor %}
+    </tbody></table>
+
+    <h2>Vehicles</h2>
+    <table class="data"><thead><tr><th>id</th><th>depot</th><th>type</th><th>capacity_kg</th><th>max_op_hrs</th><th>speed_kmh</th></tr></thead><tbody>
+    {% for v in vehicles %}<tr><td>{{ v.vehicle_id }}</td><td>{{ v.depot_id }}</td><td>{{ v.vehicle_type }}</td><td>{{ v.capacity_kg }}</td><td>{{ v.max_operational_hrs }}</td><td>{{ v.speed_kmh }}</td></tr>{% endfor %}
+    </tbody></table>
+
+    <h2>Items</h2>
+    <table class="data"><thead><tr><th>id</th><th>weight_kg</th><th>expiry_hours</th></tr></thead><tbody>
+    {% for it in items %}<tr><td>{{ it.item_id }}</td><td>{{ it.weight_kg }}</td><td>{{ it.expiry_hours }}</td></tr>{% endfor %}
+    </tbody></table>
+
+    <h2>Orders (first 50)</h2>
+    <table class="data"><thead><tr><th>customer</th><th>item</th><th>qty</th></tr></thead><tbody>
+    {% for o in orders %}<tr><td>{{ o.customer_id }}</td><td>{{ o.item_id }}</td><td>{{ o.quantity }}</td></tr>{% endfor %}
+    </tbody></table>
+</section>
+{% endblock %}

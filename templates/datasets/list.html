@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}Datasets · MDVRP{% endblock %}
+{% block content %}
+<section>
+    <header class="row spread">
+        <h1>Your datasets</h1>
+        <a class="btn primary" href="{% url 'datasets:upload' %}">Upload new</a>
+    </header>
+    {% if datasets %}
+    <table class="data">
+        <thead><tr><th>Name</th><th>Nodes</th><th>MILP</th><th>Created</th><th>Expires</th><th></th></tr></thead>
+        <tbody>
+        {% for d in datasets %}
+        <tr>
+            <td><a href="{% url 'datasets:detail' d.dataset_id %}">{{ d.name }}</a></td>
+            <td>{{ d.node_count }}</td>
+            <td>{% if d.milp_available %}<span class="badge ok">available</span>{% else %}<span class="badge muted">> 25 nodes</span>{% endif %}</td>
+            <td>{{ d.created_at|date:"Y-m-d H:i" }}</td>
+            <td>{% if d.expires_at %}{{ d.expires_at|date:"Y-m-d" }}{% else %}—{% endif %}</td>
+            <td><a class="btn" href="{% url 'runs:configure' d.dataset_id %}">Run solver</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No datasets yet. <a href="{% url 'datasets:upload' %}">Upload one</a> to get started.</p>
+    {% endif %}
+</section>
+{% endblock %}
