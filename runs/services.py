@@ -4,6 +4,7 @@ import os
 import signal
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Iterable
 
@@ -26,6 +27,7 @@ def create_batch(*, dataset, user, session_key: str) -> RunBatch:
         dataset=dataset,
         user=user,
         session_key=session_key or '',
+        share_token=uuid.uuid4() if user is None else None,
         status='pending',
     )
 

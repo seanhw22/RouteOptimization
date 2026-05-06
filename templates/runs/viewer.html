@@ -10,6 +10,23 @@
         <span class="badge" id="batch-badge">running</span>
     </header>
 
+    {% if share_token %}
+    <div class="banner info">
+        <strong>Share this run:</strong>
+        <input class="share-link-input" id="run-share-link" type="text" readonly
+               value="{{ request.scheme }}://{{ request.get_host }}{% url 'runs:viewer' batch.id %}?token={{ share_token }}">
+        <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('run-share-link').value)">Copy link</button>
+    </div>
+    {% elif request.user.is_authenticated %}
+    <div class="banner info">
+        <strong>Share this run:</strong>
+        <form method="post" action="{% url 'runs:generate_share_link' batch.id %}" style="display:inline">
+            {% csrf_token %}
+            <button class="btn" type="submit">Generate share link</button>
+        </form>
+    </div>
+    {% endif %}
+
     <div class="cards" id="experiment-cards">
         {% for exp in experiments %}
         <div class="card" id="card-{{ exp.experiment_id }}">
@@ -34,7 +51,7 @@
 
             {% if exp.algorithm == 'MILP' %}
             <button class="btn warn skip-milp" id="kill-{{ exp.experiment_id }}"
-                    data-kill-url="{% url 'runs:kill' batch.id exp.experiment_id %}"
+                    data-kill-url="{% url 'runs:kill' batch.id exp.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}"
                     style="display:none">
                 Skip MILP
             </button>
@@ -44,7 +61,7 @@
     </div>
 
     <div id="results-cta" style="display:none; margin-top:1.5rem;">
-        <a class="btn primary" href="{% url 'results:dashboard' batch.id %}">View Results</a>
+        <a class="btn primary" href="{% url 'results:dashboard' batch.id %}{% if share_token %}?token={{ share_token }}{% endif %}">View Results</a>
     </div>
 </section>
 {% endblock %}
@@ -52,7 +69,7 @@
 {% block scripts %}
 <script>
 (function () {
-    const STATUS_URL = "{% url 'runs:status' batch.id %}";
+    const STATUS_URL = "{% url 'runs:status' batch.id %}{% if share_token %}?token={{ share_token }}{% endif %}";
     const CSRF = "{{ csrf_token }}";
     let polling = true;
 

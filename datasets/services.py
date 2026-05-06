@@ -1,6 +1,7 @@
 """Dataset import services: parse uploaded CSV/XLSX files into DB rows."""
 
 import io
+import uuid
 from datetime import timedelta
 from typing import Dict
 
@@ -117,12 +118,15 @@ def save_dataset(
     can coexist without primary-key collisions on the underlying VARCHAR PKs.
     """
     expires_at = None
+    share_token = None
     if is_guest:
         expires_at = timezone.now() + timedelta(days=3)
+        share_token = uuid.uuid4()
 
     dataset = Dataset.objects.create(
         user=user,
         session_key=session_key,
+        share_token=share_token,
         name=name,
         expires_at=expires_at,
     )

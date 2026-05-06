@@ -1,9 +1,11 @@
 """Views for the runs app: configure, launch, monitor, kill."""
 
 import time
+import uuid
 
 from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
@@ -32,7 +34,10 @@ def configure(request, dataset_id):
             experiments = create_experiments(batch=batch, config=form.cleaned_data)
             launch_all(experiments)
             RunBatch.objects.filter(pk=batch.pk).update(status='running')
-            return redirect('runs:viewer', batch_id=batch.pk)
+            url = reverse('runs:viewer', kwargs={'batch_id': batch.pk})
+            if batch.share_token:
+                url += f'?token={batch.share_token}'
+            return redirect(url)
     else:
         form = SolverConfigForm(milp_available=milp_available)
 
@@ -51,6 +56,7 @@ def viewer(request, batch_id):
     return render(request, 'runs/viewer.html', {
         'batch': batch,
         'experiments': experiments,
+        'share_token': str(batch.share_token) if batch.share_token else '',
     })
 
 
@@ -97,6 +103,15 @@ def status(request, batch_id):
         },
         'experiments': payload_experiments,
     })
+
+
+@require_POST
+def generate_share_link(request, batch_id):
+    batch = get_owned_batch_or_404(request, batch_id)
+    if not batch.share_token:
+        batch.share_token = uuid.uuid4()
+        batch.save(update_fields=['share_token'])
+    return redirect('runs:viewer', batch_id=batch_id)
 
 
 @require_POST

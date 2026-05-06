@@ -61,3 +61,7 @@ django>=4.2               # Web framework for MDVRP webapp
 
 # Gunicorn - WSGI HTTP server for production deployment
 gunicorn>=21.0            # Production WSGI server
+
+# Testing
+# =======
+pytest-django>=4.8        # pytest plugin for Django (uses SQLite in-memory for test DB)

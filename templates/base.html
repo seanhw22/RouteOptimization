@@ -24,7 +24,7 @@
             <a href="{% url 'datasets:list' %}">Datasets</a>
             <a href="{% url 'datasets:upload' %}">Upload</a>
             <span class="user">Guest</span>
-            <a href="{% url 'accounts:register' %}">Register to save</a>
+            <a href="{% url 'accounts:login' %}">Login</a> or <a href="{% url 'accounts:register' %}">Register</a> to save
         {% else %}
             <a href="{% url 'accounts:login' %}">Login</a>
             <a href="{% url 'accounts:register' %}">Register</a>

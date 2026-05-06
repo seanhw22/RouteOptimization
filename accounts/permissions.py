@@ -12,6 +12,10 @@ def is_guest(request) -> bool:
 
 def owns_dataset(request, dataset) -> bool:
     """Return True if the request is allowed to access ``dataset``."""
+    # Token-based access: anyone with the share link, regardless of login state
+    token = request.GET.get('token')
+    if token and dataset.share_token and str(dataset.share_token) == token:
+        return True
     if request.user.is_authenticated:
         return dataset.user_id == request.user.id
     # Guest: must be in their session's allow-list
@@ -21,6 +25,10 @@ def owns_dataset(request, dataset) -> bool:
 
 def owns_run_batch(request, batch) -> bool:
     """Return True if the request is allowed to access ``batch``."""
+    # Token-based access: anyone with the share link, regardless of login state
+    token = request.GET.get('token')
+    if token and batch.share_token and str(batch.share_token) == token:
+        return True
     if request.user.is_authenticated:
         return batch.user_id == request.user.id
     if not request.session.session_key:

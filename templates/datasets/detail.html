@@ -10,8 +10,25 @@
                 {% if dataset.expires_at %}<strong>Expires {{ dataset.expires_at|date:"Y-m-d" }}.</strong>{% endif %}
             </p>
         </div>
-        <a class="btn primary" href="{% url 'runs:configure' dataset.dataset_id %}">Run solver</a>
+        <a class="btn primary" href="{% url 'runs:configure' dataset.dataset_id %}{% if share_token %}?token={{ share_token }}{% endif %}">Run solver</a>
     </header>
+
+    {% if share_token %}
+    <div class="banner info">
+        <strong>Share this dataset:</strong>
+        <input class="share-link-input" id="dataset-share-link" type="text" readonly
+               value="{{ request.scheme }}://{{ request.get_host }}{% url 'datasets:detail' dataset.dataset_id %}?token={{ share_token }}">
+        <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('dataset-share-link').value)">Copy link</button>
+    </div>
+    {% elif request.user.is_authenticated %}
+    <div class="banner info">
+        <strong>Share this dataset:</strong>
+        <form method="post" action="{% url 'datasets:generate_share_link' dataset.dataset_id %}" style="display:inline">
+            {% csrf_token %}
+            <button class="btn" type="submit">Generate share link</button>
+        </form>
+    </div>
+    {% endif %}
 
     <div class="counters">
         <div><strong>{{ counts.nodes }}</strong> nodes ({{ counts.depots }} depots + {{ counts.customers }} customers)</div>
@@ -33,9 +50,9 @@
             <td>{% for exp in batch.experiments.all %}{{ exp.algorithm }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
             <td>{{ batch.created_at|date:"Y-m-d H:i" }}</td>
             <td class="btn-group">
-                <a class="btn" href="{% url 'runs:viewer' batch.id %}">View run</a>
+                <a class="btn" href="{% url 'runs:viewer' batch.id %}{% if batch.share_token %}?token={{ batch.share_token }}{% endif %}">View run</a>
                 {% if batch.status == 'completed' or batch.status == 'partial' %}
-                <a class="btn" href="{% url 'results:dashboard' batch.id %}">Results</a>
+                <a class="btn" href="{% url 'results:dashboard' batch.id %}{% if batch.share_token %}?token={{ batch.share_token }}{% endif %}">Results</a>
                 {% endif %}
             </td>
         </tr>

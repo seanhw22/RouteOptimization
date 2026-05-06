@@ -1,8 +1,10 @@
 """Views for the datasets app: upload, list, detail."""
 
+import uuid
+
 from django.contrib import messages
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.permissions import (
     get_owned_dataset_or_404,
@@ -16,7 +18,7 @@ from .services import DatasetValidationError, parse_uploaded, save_dataset, vali
 
 def _require_session(request):
     """Authenticated users + guests both proceed; otherwise bounce to login."""
-    if request.user.is_authenticated or is_guest(request):
+    if request.user.is_authenticated or is_guest(request) or request.GET.get('token'):
         return None
     return redirect('accounts:login')
 
@@ -99,7 +101,8 @@ def detail(request, dataset_id):
     if request.user.is_authenticated:
         run_batches = dataset.run_batches.filter(user=request.user)
     else:
-        run_batches = dataset.run_batches.filter(session_key=request.session.session_key)
+        # Ownership already verified; show all batches for this guest dataset
+        run_batches = dataset.run_batches.all()
     run_batches = run_batches.prefetch_related('experiments').order_by('-created_at')
 
     return render(request, 'datasets/detail.html', {
@@ -112,4 +115,14 @@ def detail(request, dataset_id):
         'orders': orders[:50],
         'milp_available': counts['nodes'] <= 25,
         'run_batches': run_batches,
+        'share_token': str(dataset.share_token) if dataset.share_token else '',
     })
+
+
+@require_POST
+def generate_share_link(request, dataset_id):
+    dataset = get_owned_dataset_or_404(request, dataset_id)
+    if not dataset.share_token:
+        dataset.share_token = uuid.uuid4()
+        dataset.save(update_fields=['share_token'])
+    return redirect('datasets:detail', dataset_id=dataset_id)

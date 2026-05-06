@@ -18,6 +18,7 @@
         </div>
         <button type="submit" class="primary">Sign in</button>
     </form>
+    <p class="muted"><a href="{% url 'accounts:password_reset' %}">Forgot password?</a></p>
     <p class="muted">No account? <a href="{% url 'accounts:register' %}">Register</a> or <a href="{% url 'accounts:guest' %}">continue as guest</a>.</p>
 </section>
 {% endblock %}

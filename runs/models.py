@@ -26,6 +26,7 @@ class RunBatch(models.Model):
         related_name='run_batches',
     )
     session_key = models.CharField(max_length=64, blank=True, default='')
+    share_token = models.UUIDField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
 

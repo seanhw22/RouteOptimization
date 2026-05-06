@@ -51,7 +51,7 @@ def _build_solution(experiment_id, dataset_id):
 
 def _build_coordinates(dataset_id):
     """Return {node_id: (lat, lon)} treating Node.y as lat, Node.x as lon."""
-    return {n.node_id: (n.y, n.x) for n in Node.objects.filter(dataset_id=dataset_id)}
+    return {n.node_id: (n.x, n.y) for n in Node.objects.filter(dataset_id=dataset_id)}
 
 
 def _build_problem_data(dataset_id):
@@ -78,8 +78,8 @@ def _build_geojson(solution, coordinates):
     routes = solution['routes']
     depot_for_vehicle = solution.get('depot_for_vehicle', {})
     route_colors = [
-        '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
-        '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788',
+        '#E63946', '#F4A261', '#2A9D8F', '#9B5DE5', '#FFB703',
+        '#3A86FF', '#F72585', '#06D6A0', '#FB5607', '#8AC926',
     ]
 
     features = []
@@ -189,7 +189,7 @@ def dashboard(request, batch_id):
         algo_items.append(item)
 
     days_remaining = None
-    if request.session.get('is_guest') and batch.dataset.expires_at:
+    if batch.dataset.user is None and batch.dataset.expires_at:
         delta = batch.dataset.expires_at - timezone.now()
         days_remaining = max(0, delta.days)
 
@@ -200,6 +200,7 @@ def dashboard(request, batch_id):
         'chart_labels': json.dumps(chart_labels),
         'chart_values': json.dumps(chart_values),
         'days_remaining': days_remaining,
+        'share_token': str(batch.share_token) if batch.share_token else '',
     })
 
 

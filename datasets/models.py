@@ -14,6 +14,7 @@ class Dataset(models.Model):
         related_name='datasets',
     )
     session_key = models.CharField(max_length=64, blank=True, default='')
+    share_token = models.UUIDField(null=True, blank=True)
     name = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(null=True, blank=True)
