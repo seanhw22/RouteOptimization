@@ -139,6 +139,9 @@ class MDVRPExporter:
             spaceBefore=10
         )
 
+        cell_style_10 = ParagraphStyle('CellWrap10', parent=styles['Normal'], fontSize=10)
+        cell_style_8 = ParagraphStyle('CellWrap8', parent=styles['Normal'], fontSize=8)
+
         # Title
         title = Paragraph("MDVRP Solution Report", title_style)
         story.append(title)
@@ -197,7 +200,7 @@ class MDVRPExporter:
                 capacities = ', '.join([f"{k}: {v} kg" for k, v in vehicle_capacity.items()])
             else:
                 capacities = f"{vehicle_capacity} kg"
-            specs_data.append(['Vehicle Capacity', capacities])
+            specs_data.append(['Vehicle Capacity', Paragraph(capacities, cell_style_10)])
 
         # Add vehicle speed if available
         if vehicle_speed:
@@ -205,7 +208,7 @@ class MDVRPExporter:
                 speeds = ', '.join([f"{k}: {v} km/h" for k, v in vehicle_speed.items()])
             else:
                 speeds = f"{vehicle_speed} km/h"
-            specs_data.append(['Vehicle Speed', speeds])
+            specs_data.append(['Vehicle Speed', Paragraph(speeds, cell_style_10)])
 
         # Add max time if available
         if max_time:
@@ -216,10 +219,10 @@ class MDVRPExporter:
             else:
                 times = "Not specified"
             if times:  # Only add if there's actual data
-                specs_data.append(['Maximum Route Time', times])
+                specs_data.append(['Maximum Route Time', Paragraph(times, cell_style_10)])
 
         # Create specs table
-        specs_table = Table(specs_data, colWidths=[2.5*inch, 2.5*inch])
+        specs_table = Table(specs_data, colWidths=[2.2*inch, 4.8*inch])
         specs_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -289,7 +292,7 @@ class MDVRPExporter:
                 stats_data.append(['Total Route Time', f"{total_time:.2f} hours"])
 
         # Create stats table
-        stats_table = Table(stats_data, colWidths=[2.5*inch, 2.5*inch])
+        stats_table = Table(stats_data, colWidths=[2.2*inch, 4.8*inch])
         stats_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -347,7 +350,7 @@ class MDVRPExporter:
 
             table_data.append([
                 vehicle_id,
-                route_str,
+                Paragraph(route_str, cell_style_8),
                 f"{distance:.2f}",
                 f"{time_hours:.2f}",
                 f"{load_kg:.2f}",
@@ -355,11 +358,12 @@ class MDVRPExporter:
             ])
 
         # Create table
-        table = Table(table_data, colWidths=[1*inch, 2.5*inch, 1*inch, 0.8*inch, 0.8*inch, 1*inch])
+        table = Table(table_data, colWidths=[0.7*inch, 3.3*inch, 0.9*inch, 0.8*inch, 0.8*inch, 0.9*inch])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 1), (1, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
@@ -367,6 +371,7 @@ class MDVRPExporter:
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ]))
 
         story.append(table)

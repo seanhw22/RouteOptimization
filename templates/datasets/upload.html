@@ -1,31 +1,58 @@
 {% extends 'base.html' %}
 {% block title %}Upload dataset · MDVRP{% endblock %}
 {% block content %}
-<section class="card">
-    <h1>Upload dataset</h1>
-    <p class="muted">Provide either a single XLSX with five named sheets, or all five CSVs.
-        Required columns:
-        <code>depots(depot_id,x,y)</code>,
-        <code>customers(customer_id,x,y,deadline_hours)</code>,
-        <code>vehicles(vehicle_id,depot_id,vehicle_type,capacity_kg,max_operational_hrs,speed_kmh)</code>,
-        <code>items(item_id,weight_kg,expiry_hours)</code>,
-        <code>orders(customer_id,item_id,quantity)</code>.</p>
+<section>
+    <header>
+        <h1>Upload dataset</h1>
+        <p class="muted">Upload your logistics data as a single XLSX workbook or as individual CSV files.</p>
+    </header>
+
+    <div class="schema-info">
+        <p class="muted" style="font-size:.875rem;margin:0 0 .75rem;font-weight:500">Required column schema</p>
+        <table class="data">
+            <thead><tr><th>Sheet / file</th><th>Required columns</th></tr></thead>
+            <tbody>
+                <tr><td><code>depots</code></td><td><code>depot_id, x, y</code></td></tr>
+                <tr><td><code>customers</code></td><td><code>customer_id, x, y, deadline_hours</code></td></tr>
+                <tr><td><code>vehicles</code></td><td><code>vehicle_id, depot_id, vehicle_type, capacity_kg, max_operational_hrs, speed_kmh</code></td></tr>
+                <tr><td><code>items</code></td><td><code>item_id, weight_kg, expiry_hours</code></td></tr>
+                <tr><td><code>orders</code></td><td><code>customer_id, item_id, quantity</code></td></tr>
+            </tbody>
+        </table>
+    </div>
 
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         {% if form.non_field_errors %}<div class="formerrors">{{ form.non_field_errors }}</div>{% endif %}
+
         <div class="field">
             <label for="id_name">Dataset name</label>
             {{ form.name }}{{ form.name.errors }}
         </div>
 
-        <h2>Option A: single XLSX</h2>
-        <div class="field"><label for="id_xlsx">XLSX file</label>{{ form.xlsx }}{{ form.xlsx.errors }}</div>
+        <div class="upload-options">
+            <div class="upload-option">
+                <h2>Option A — Single XLSX</h2>
+                <p class="muted">One workbook with five named sheets.</p>
+                <div class="field" style="margin-bottom:0">
+                    <label for="id_xlsx">XLSX file</label>
+                    {{ form.xlsx }}{{ form.xlsx.errors }}
+                </div>
+            </div>
 
-        <h2>Option B: five CSVs</h2>
-        {% for f in form %}{% if f.name|slice:"-4:" == "_csv" %}
-        <div class="field"><label for="{{ f.id_for_label }}">{{ f.label }} ({{ f.help_text }})</label>{{ f }}{{ f.errors }}</div>
-        {% endif %}{% endfor %}
+            <div class="option-or">or</div>
+
+            <div class="upload-option">
+                <h2>Option B — Five CSVs</h2>
+                <p class="muted">One CSV file per sheet.</p>
+                {% for f in form %}{% if f.name|slice:"-4:" == "_csv" %}
+                <div class="field">
+                    <label for="{{ f.id_for_label }}">{{ f.label }}</label>
+                    {{ f }}{{ f.errors }}
+                </div>
+                {% endif %}{% endfor %}
+            </div>
+        </div>
 
         <button type="submit" class="primary">Upload &amp; preview</button>
     </form>

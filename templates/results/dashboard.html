@@ -150,39 +150,153 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const gj = geojsonData[algo];
         if (gj) {
-            const layer = L.geoJSON(gj, {
-                style: f => ({
-                    color: f.properties.stroke || '#3388ff',
-                    weight: f.properties['stroke-width'] || 3,
-                    opacity: f.properties['stroke-opacity'] || 0.8,
-                }),
-                pointToLayer: (f, latlng) => {
-                    const isDepot = f.properties.type === 'depot';
-                    return L.circleMarker(latlng, {
-                        radius: isDepot ? 10 : 6,
-                        fillColor: isDepot ? '#2C3E50' : '#27AE60',
-                        color: '#fff',
-                        weight: 1,
-                        fillOpacity: 0.9,
-                    });
-                },
-                onEachFeature: (f, layer) => {
-                    if (f.properties.id) layer.bindPopup(f.properties.id);
-                    else if (f.properties.vehicle_id)
-                        layer.bindPopup('Vehicle ' + f.properties.vehicle_id + ': ' + f.properties.distance_km + ' km');
-                }
-            }).addTo(map);
-            try { layerBounds[algo] = layer.getBounds(); } catch (e) {}
+            const pointFeatures = gj.features.filter(f => f.geometry.type === 'Point');
+            const routeFeatures = gj.features.filter(f => f.geometry.type === 'LineString');
 
-            layer.eachLayer(function (l) {
-                if (l.feature && l.feature.geometry.type === 'LineString') {
-                    addRouteArrows(
-                        l.feature.geometry.coordinates,
-                        l.feature.properties.stroke || '#3388ff',
-                        map
-                    );
+            // Points layer — always visible
+            const pointLayer = L.geoJSON(
+                { type: 'FeatureCollection', features: pointFeatures },
+                {
+                    pointToLayer: (f, latlng) => {
+                        const isDepot = f.properties.type === 'depot';
+                        return L.circleMarker(latlng, {
+                            radius: isDepot ? 10 : 6,
+                            fillColor: isDepot ? (f.properties['depot-color'] || '#2C3E50') : '#27AE60',
+                            color: '#fff',
+                            weight: 1,
+                            fillOpacity: 0.9,
+                        });
+                    },
+                    onEachFeature: (f, layer) => {
+                        if (f.properties.id) layer.bindPopup(f.properties.id);
+                    }
                 }
-            });
+            ).addTo(map);
+
+            // One layer group per vehicle so they can be toggled independently
+            const vehicleLayers = {};
+            const vehicleMeta = {};
+            for (const f of routeFeatures) {
+                const vid = f.properties.vehicle_id;
+                const col = f.properties.stroke || '#3388ff';
+                const depotId = f.properties.depot_id || '';
+                const lg = L.featureGroup().addTo(map);
+                L.geoJSON(f, {
+                    style: () => ({
+                        color: col,
+                        weight: f.properties['stroke-width'] || 4,
+                        opacity: f.properties['stroke-opacity'] || 0.8,
+                    })
+                }).addTo(lg);
+                addRouteArrows(f.geometry.coordinates, col, lg);
+                vehicleLayers[vid] = lg;
+                vehicleMeta[vid] = { col, depotId };
+            }
+
+            try {
+                layerBounds[algo] = L.featureGroup(
+                    [pointLayer, ...Object.values(vehicleLayers)]
+                ).getBounds();
+            } catch (e) {}
+
+            // Depot color map from point features
+            const depotColorMap = {};
+            for (const f of pointFeatures) {
+                if (f.properties.type === 'depot')
+                    depotColorMap[f.properties.id] = f.properties['depot-color'] || '#2C3E50';
+            }
+
+            // Group vehicles by their depot
+            const depotGroups = {};
+            for (const [vid, meta] of Object.entries(vehicleMeta)) {
+                const key = meta.depotId || '';
+                if (!depotGroups[key]) depotGroups[key] = [];
+                depotGroups[key].push(vid);
+            }
+
+            // Filter / toggle panel
+            if (routeFeatures.length > 0) {
+                const filterControl = L.control({ position: 'topright' });
+                filterControl.onAdd = function () {
+                    const div = L.DomUtil.create('div', 'map-filter-panel');
+                    L.DomEvent.disableClickPropagation(div);
+                    L.DomEvent.disableScrollPropagation(div);
+
+                    div.innerHTML = `
+                        <div class="map-filter-header">
+                            <strong>Routes</strong>
+                            <div class="map-filter-actions">
+                                <button class="filter-all-btn" data-action="show">All</button>
+                                <button class="filter-all-btn" data-action="hide">None</button>
+                            </div>
+                        </div>
+                        <div class="map-filter-scroll"></div>`;
+
+                    const scroll = div.querySelector('.map-filter-scroll');
+
+                    for (const [depotId, vids] of Object.entries(depotGroups)) {
+                        const depotCol = depotColorMap[depotId] || '#2C3E50';
+                        const depotLabel = depotId.includes('_')
+                            ? depotId.split('_').slice(1).join('_') : (depotId || 'No depot');
+
+                        const group = document.createElement('div');
+                        group.className = 'map-filter-group';
+
+                        const header = document.createElement('div');
+                        header.className = 'map-filter-group-header';
+                        header.innerHTML = `
+                            <span class="legend-dot" style="background:${depotCol}"></span>
+                            <span>${depotLabel}</span>
+                            <label class="filter-depot-toggle">
+                                <input type="checkbox" checked data-depot="${depotId}"> all
+                            </label>`;
+                        group.appendChild(header);
+
+                        for (const vid of vids) {
+                            const row = document.createElement('label');
+                            row.className = 'map-filter-row';
+                            row.innerHTML = `<input type="checkbox" checked data-vid="${vid}">
+                                <span class="legend-swatch" style="background:${vehicleMeta[vid].col}"></span>
+                                Vehicle ${vid}`;
+                            group.appendChild(row);
+                        }
+                        scroll.appendChild(group);
+                    }
+
+                    div.querySelectorAll('input[data-vid]').forEach(cb => {
+                        cb.addEventListener('change', function () {
+                            if (this.checked) vehicleLayers[this.dataset.vid].addTo(map);
+                            else map.removeLayer(vehicleLayers[this.dataset.vid]);
+                        });
+                    });
+
+                    div.querySelectorAll('input[data-depot]').forEach(cb => {
+                        cb.addEventListener('change', function () {
+                            const vids = depotGroups[this.dataset.depot] || [];
+                            div.querySelectorAll('input[data-vid]').forEach(vcb => {
+                                if (vids.includes(vcb.dataset.vid)) {
+                                    vcb.checked = this.checked;
+                                    vcb.dispatchEvent(new Event('change'));
+                                }
+                            });
+                        });
+                    });
+
+                    div.querySelectorAll('.filter-all-btn').forEach(btn => {
+                        btn.addEventListener('click', function () {
+                            const show = this.dataset.action === 'show';
+                            div.querySelectorAll('input[type=checkbox]').forEach(cb => { cb.checked = show; });
+                            Object.values(vehicleLayers).forEach(lg => {
+                                if (show) lg.addTo(map);
+                                else map.removeLayer(lg);
+                            });
+                        });
+                    });
+
+                    return div;
+                };
+                filterControl.addTo(map);
+            }
         }
     })();
     {% endif %}{% endfor %}

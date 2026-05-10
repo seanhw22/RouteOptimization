@@ -81,19 +81,31 @@ def _build_geojson(solution, coordinates):
         '#E63946', '#F4A261', '#2A9D8F', '#9B5DE5', '#FFB703',
         '#3A86FF', '#F72585', '#06D6A0', '#FB5607', '#8AC926',
     ]
+    depot_colors = [
+        '#2C3E50', '#6D4C41', '#1565C0', '#558B2F', '#6A1B9A',
+        '#00838F', '#AD1457', '#E65100', '#37474F', '#4527A0',
+    ]
+
+    depot_ids = sorted({
+        nid for nid in coordinates
+        if (nid.split('_', 1)[-1] if '_' in nid else nid).upper().startswith('D')
+    })
+    depot_color_map = {nid: depot_colors[i % len(depot_colors)] for i, nid in enumerate(depot_ids)}
 
     features = []
 
     for node_id, (lat, lon) in coordinates.items():
         raw = node_id.split('_', 1)[-1] if '_' in node_id else node_id
         is_depot = raw.upper().startswith('D')
+        color = depot_color_map.get(node_id, '#2C3E50') if is_depot else '#27AE60'
         features.append(Feature(
             geometry=Point((lon, lat)),
             properties={
                 'id': node_id,
                 'type': 'depot' if is_depot else 'customer',
-                'marker-color': '#2C3E50' if is_depot else '#27AE60',
+                'marker-color': color,
                 'marker-size': 'large' if is_depot else 'medium',
+                **(({'depot-color': color}) if is_depot else {}),
             }
         ))
 
@@ -112,6 +124,7 @@ def _build_geojson(solution, coordinates):
                 geometry=LineString(coords),
                 properties={
                     'vehicle_id': vehicle_id,
+                    'depot_id': depot or '',
                     'type': 'route',
                     'distance_km': round(info.get('distance', 0), 2),
                     'time_hours': round(info.get('time', 0), 2),
