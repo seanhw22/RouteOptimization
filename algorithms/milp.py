@@ -81,7 +81,7 @@ class MDVRP:
                             time_dict[node_i][node_j] = self.T[k][i][j]
                     self.T[k] = time_dict
 
-        # Calculate demand for each customer
+        # Constraint (14): d_j = ∑_{m∈I} w_m·r_jm, ∀j∈C — demand per customer, pre-computed as parameter
         self.d = {}
         for j in customers:
             self.d[j] = sum(self.w[m] * self.r[j].get(m, 0) for m in items)
@@ -102,8 +102,7 @@ class MDVRP:
         model = gp.Model("MDVRP")
         model.Params.OutputFlag = 1
 
-        # Decision variables
-        # x_ijk: 1 if vehicle k moves from node i to node j
+        # Constraint (15): x_ijk ∈ {0,1} — binary route decision variable
         x = {}
         for k in self.vehicles:
             for i in self.nodes:
@@ -111,12 +110,12 @@ class MDVRP:
                     if i != j:
                         x[i, j, k] = model.addVar(vtype=GRB.BINARY, name=f"x_{i}_{j}_{k}")
 
-        # u_i: auxiliary variable for subtour elimination (MTZ)
+        # Constraint (16): u_i ≥ 0 — non-negative MTZ auxiliary variable for subtour elimination
         u = {}
         for i in self.customers:
             u[i] = model.addVar(vtype=GRB.CONTINUOUS, lb=0, name=f"u_{i}")
 
-        # t_jk: arrival time of vehicle k at node j
+        # Constraint (17): t_jk ≥ 0, ∀j∈N, ∀k∈K — non-negative arrival time variable
         t = {}
         for j in self.nodes:
             for k in self.vehicles:
@@ -134,7 +133,7 @@ class MDVRP:
         )
         model.setObjective(obj, GRB.MINIMIZE)
 
-        # Constraint (2): Each customer visited exactly once
+        # Constraint (2): ∑_{k∈K} ∑_{i∈N,i≠j} x_ijk = 1, ∀j∈C — each customer visited exactly once
         for j in self.customers:
             model.addConstr(
                 gp.quicksum(
@@ -146,8 +145,7 @@ class MDVRP:
                 name=f"visit_once_{j}"
             )
 
-        # Constraint (3): Route continuity (flow conservation)
-        # Applied to customers AND depots (including vehicle's assigned depot)
+        # Constraint (3): ∑_{i∈N,i≠j} x_ijk = ∑_{h∈N,h≠j} x_jhk, ∀j∈N, ∀k∈K — flow conservation
         for j in self.customers + self.depots:
             for k in self.vehicles:
                 model.addConstr(
@@ -156,7 +154,7 @@ class MDVRP:
                     name=f"flow_{j}_{k}"
                 )
 
-        # Constraint (4): Each vehicle leaves its assigned depot at most once
+        # Constraint (4): ∑_{j∈N} x_d(k),j,k ≤ 1, ∀k∈K — each vehicle departs its home depot at most once
         for k in self.vehicles:
             depot_k = self.depot_for_vehicle[k]
             model.addConstr(
@@ -164,7 +162,7 @@ class MDVRP:
                 name=f"depot_out_{k}"
             )
 
-        # Constraint (5): Each vehicle returns to its assigned depot at most once
+        # Constraint (5): ∑_{i∈N} x_i,d(k),k ≤ 1, ∀k∈K — each vehicle returns to its home depot at most once
         for k in self.vehicles:
             depot_k = self.depot_for_vehicle[k]
             model.addConstr(
@@ -172,8 +170,8 @@ class MDVRP:
                 name=f"depot_in_{k}"
             )
 
-        # Additional: Prevent vehicles from using depots other than their assigned one
-        # This is NECESSARY because PDF constraints (4) and (5) don't explicitly prevent cross-depot routes
+        # Constraint (6): x_ijk = 0, ∀k∈K, ∀i∈N, ∀j∈D, j≠d(k) — vehicle cannot arrive at a non-home depot
+        # Constraint (7): x_ijk = 0, ∀k∈K, ∀i∈D, i≠d(k), ∀j∈N — vehicle cannot depart from a non-home depot
         for k in self.vehicles:
             depot_k = self.depot_for_vehicle[k]
             other_depots = [d for d in self.depots if d != depot_k]
@@ -187,7 +185,7 @@ class MDVRP:
                     name=f"no_to_{k}_{other_depot}"
                 )
 
-        # Constraint (6): MTZ subtour elimination
+        # Constraint (8): u_i − u_j + n·x_ijk ≤ n−1, ∀i,j∈C, i≠j, ∀k∈K — MTZ subtour elimination
         for i in self.customers:
             for j in self.customers:
                 if i != j:
@@ -197,7 +195,7 @@ class MDVRP:
                             name=f"mtz_{i}_{j}_{k}"
                         )
 
-        # Constraint (7): Vehicle capacity constraint
+        # Constraint (9): ∑_{j∈C} d_j·∑_{i∈N} x_ijk ≤ Q_k, ∀k∈K — vehicle capacity
         for k in self.vehicles:
             model.addConstr(
                 gp.quicksum(
@@ -207,7 +205,7 @@ class MDVRP:
                 name=f"capacity_{k}"
             )
 
-        # Constraint (8): Time starts at 0 from depot
+        # Constraint (10): t_d(k),k = 0, ∀k∈K — departure time from depot is zero
         for k in self.vehicles:
             depot_k = self.depot_for_vehicle[k]
             model.addConstr(
@@ -215,10 +213,7 @@ class MDVRP:
                 name=f"time_depot_{k}"
             )
 
-        # Constraint (9): Time flow consistency
-        # Applied to customer arrivals (depot time is implicitly 0 at start)
-        # Support both T[i][j] (same for all vehicles) and T[k][i][j] (vehicle-specific)
-        # Detect structure: check if first value is dict of dicts (3D) or dict of numbers (2D)
+        # Constraint (11): t_jk ≥ t_ik + T_ij − M(1−x_ijk), ∀i,j∈C, i≠j, ∀k∈K — time flow consistency
         first_key = list(self.T.keys())[0]
         first_value = self.T[first_key]
         # Check if first_value contains dicts (3D) or numbers (2D)
@@ -238,8 +233,7 @@ class MDVRP:
                             name=f"time_flow_{i}_{j}_{k}"
                         )
 
-        # Constraint (10): Time window upper bound (customer deadline & item expiry)
-        # Customer must be served before effective deadline (min of customer deadline and item expiry times)
+        # Constraint (12): t_jk ≤ L_j + M(1−∑_{i∈N} x_ijk), ∀j∈C, ∀k∈K — arrival before customer deadline
         for j in self.customers:
             for k in self.vehicles:
                 model.addConstr(
@@ -247,12 +241,11 @@ class MDVRP:
                     name=f"time_window_{j}_{k}"
                 )
 
-        # Constraint (11): Maximum operational time per vehicle
-        # Vehicle cannot travel longer than T_max[k] (from customer deadline & item expiry perspective)
+        # Constraint (13): t_jk ≤ T_k, ∀j∈C, ∀k∈K — arrival within vehicle's max operational time
         for j in self.customers:
             for k in self.vehicles:
                 model.addConstr(
-                    t[j, k] <= self.T_max[k] + self.M * (1 - gp.quicksum(x[i, j, k] for i in self.nodes if i != j)),
+                    t[j, k] <= self.T_max[k],
                     name=f"max_time_{j}_{k}"
                 )
 

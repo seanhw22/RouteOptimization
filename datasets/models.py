@@ -143,7 +143,6 @@ class NodeDistance(models.Model):
         Dataset, on_delete=models.CASCADE, related_name='node_distances', db_column='dataset_id'
     )
     distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    travel_time = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
 
     class Meta:
         db_table = 'node_distances'

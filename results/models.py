@@ -2,7 +2,7 @@
 
 from django.db import models
 
-from datasets.models import Node
+from datasets.models import Node, Vehicle
 from runs.models import Experiment
 
 
@@ -11,7 +11,9 @@ class Route(models.Model):
     experiment = models.ForeignKey(
         Experiment, on_delete=models.CASCADE, related_name='routes', db_column='experiment_id'
     )
-    vehicle_id = models.CharField(max_length=50)
+    vehicle = models.ForeignKey(
+        Vehicle, on_delete=models.CASCADE, related_name='routes', db_column='vehicle_id'
+    )
     node_start = models.ForeignKey(
         Node,
         on_delete=models.CASCADE,

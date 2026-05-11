@@ -689,23 +689,15 @@ class MDVRPHGA:
             return total_time
 
     def _mutation_pipeline(self, individual: List) -> Tuple:
-        """Apply mutation pipeline: swap + 2-opt + relocation"""
+        """Apply swap mutation only — 2-opt and relocation are applied separately to all offspring"""
         # Convert to list if it's an Individual object
         if hasattr(individual, 'fitness'):
             individual_list = list(individual)
         else:
             individual_list = individual
 
-        # Apply swap mutation
+        # Apply swap mutation only
         individual_list = list(self._swap_mutation(individual_list)[0])
-
-        # Apply 2-opt local search (always run)
-        routes = self._decode_chromosome(individual_list)
-        individual_list = self._two_opt_local_search(individual_list, routes)
-
-        # Apply relocation local search
-        routes = self._decode_chromosome(individual_list)
-        individual_list = self._relocation_local_search(individual_list, routes)
 
         # Return as tuple (required by DEAP)
         return (individual_list,)
@@ -899,6 +891,15 @@ class MDVRPHGA:
                     # Create new Individual from mutated list
                     offspring[i] = creator.Individual(mutated_list)
                     # New individual has invalid fitness by default
+
+            # Apply local search to ALL offspring (PDF Section 2.6.4 — Step 4)
+            # 2-opt and relocation run on every individual after crossover and mutation
+            for i in range(len(offspring)):
+                routes = self._decode_chromosome(offspring[i])
+                improved = self._two_opt_local_search(offspring[i], routes)
+                routes = self._decode_chromosome(improved)
+                improved = self._relocation_local_search(improved, routes)
+                offspring[i] = creator.Individual(improved)
 
             # Evaluate invalid individuals
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
