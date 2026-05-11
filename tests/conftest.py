@@ -6,24 +6,6 @@ import pandas as pd
 import pytest
 
 
-# ── Database ──────────────────────────────────────────────────────────────────
-# Override to SQLite in-memory so tests don't require a running PostgreSQL server.
-
-@pytest.fixture(scope='session')
-def django_db_setup(django_test_environment, django_db_blocker):
-    from django.conf import settings as _settings
-    from django.test.utils import setup_databases
-
-    _settings.DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': ':memory:',
-        }
-    }
-    with django_db_blocker.unblock():
-        setup_databases(verbosity=0, interactive=False)
-
-
 # ── Minimal dataset frames (no DB required) ───────────────────────────────────
 
 @pytest.fixture
