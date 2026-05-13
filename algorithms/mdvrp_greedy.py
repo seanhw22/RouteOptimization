@@ -77,7 +77,7 @@ class MDVRPGreedy:
             # Calculate from dict
             self.demand = {}
             for j in customers:
-                self.demand[j] = sum(self.w[m] * self.r[j][m] for m in items if self.r[j][m] > 0)
+                self.demand[j] = sum(self.w[m] * self.r[j].get(m, 0) for m in items)
 
         # Initialize routes (will be reset in solve())
         self.routes = {k: [] for k in vehicles}
