@@ -7,6 +7,7 @@ Refactored to support Pandas I/O and tqdm progress tracking
 import gurobipy as gp
 from gurobipy import GRB
 import os
+import threading
 from typing import Dict, List, Tuple, Optional, Callable
 import time
 
@@ -254,6 +255,7 @@ class MDVRP:
         self.u = u
         self.t = t
 
+        model.update()  # commit all pending variables and constraints
         return model
 
     def solve(self, time_limit=None, mip_gap=None, progress_callback=None,
@@ -293,16 +295,99 @@ class MDVRP:
             print(f"Constraints: {self.model.NumConstrs}")
             print("\nOptimizing...")
 
+        # Build Gurobi callback to stream progress through progress_callback
+        _gurobi_cb = None
+        if progress_callback is not None:
+            try:
+                from django.db import close_old_connections
+                close_old_connections()
+            except Exception:
+                pass
+
+            _tl = time_limit or 3600
+            _state = {'best_obj': float('inf'), 'best_bound': None, 'nodes': 0}
+
+            def _gurobi_cb(where):
+                # Pure state updater — no DB writes here. The heartbeat thread
+                # reads _state every 3s and does all progress_callback calls.
+                try:
+                    if where == GRB.Callback.MIP:
+                        _state['nodes'] = int(self.model.cbGet(GRB.Callback.MIP_NODCNT))
+                        _state['best_bound'] = self.model.cbGet(GRB.Callback.MIP_OBJBND)
+                        obj_best = self.model.cbGet(GRB.Callback.MIP_OBJBST)
+                        if obj_best < 1e30:
+                            _state['best_obj'] = obj_best
+                    elif where == GRB.Callback.MIPSOL:
+                        _state['best_obj'] = self.model.cbGet(GRB.Callback.MIPSOL_OBJ)
+                        _state['nodes'] = int(self.model.cbGet(GRB.Callback.MIPSOL_NODCNT))
+                    elif where == GRB.Callback.MIPNODE:
+                        _state['nodes'] = int(self.model.cbGet(GRB.Callback.MIPNODE_NODCNT))
+                        obj_best = self.model.cbGet(GRB.Callback.MIPNODE_OBJBST)
+                        if obj_best < 1e30:
+                            _state['best_obj'] = obj_best
+                except Exception:
+                    pass
+
+        # Heartbeat thread: fires every 3s so the viewer always has something to show
+        # even when Gurobi's event callbacks are sparse or silent.
+        _stop_heartbeat = None
+        _heartbeat_thread = None
+        if progress_callback is not None:
+            _stop_heartbeat = threading.Event()
+
+            def _heartbeat():
+                while not _stop_heartbeat.wait(3.0):
+                    elapsed = time.time() - start_time
+                    pct = min(int(elapsed / _tl * 100), 99)
+                    best_obj = _state['best_obj']
+                    best_bound = _state['best_bound']
+                    nodes = _state['nodes']
+                    if best_obj < 1e30 and best_bound is not None:
+                        gap = abs(best_obj - best_bound) / (abs(best_obj) + 1e-10) * 100
+                        msg = (f"[{elapsed:.0f}s] Best: {best_obj:.4f}, "
+                               f"bound={best_bound:.4f}, gap={gap:.2f}%, nodes={nodes}")
+                    else:
+                        msg = f"[{elapsed:.0f}s] Optimizing... nodes={nodes}"
+                    try:
+                        progress_callback(pct, 100, msg)
+                    except Exception:
+                        pass
+
+            _heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True)
+            _heartbeat_thread.start()
+
         # Optimize
-        self.model.optimize()
+        try:
+            self.model.optimize(_gurobi_cb)
+        finally:
+            if _stop_heartbeat is not None:
+                _stop_heartbeat.set()
+            if _heartbeat_thread is not None:
+                _heartbeat_thread.join(timeout=5)
 
         runtime = time.time() - start_time
+
+        # Always log post-solve stats — useful even when callbacks never fired
+        if progress_callback is not None:
+            try:
+                node_count = int(self.model.NodeCount)
+                iter_count = int(self.model.IterCount)
+                obj_val = f"{self.model.ObjVal:.4f}" if self.model.SolCount > 0 else "none"
+                obj_bnd = f"{self.model.ObjBound:.4f}" if self.model.SolCount > 0 else "n/a"
+                progress_callback(
+                    99, 100,
+                    f"Solve complete: obj={obj_val}, bound={obj_bnd}, "
+                    f"{node_count} B&B nodes, {iter_count} simplex iters, {runtime:.1f}s"
+                )
+            except Exception:
+                pass
 
         # Determine status
         if self.model.status == GRB.OPTIMAL:
             status_str = 'optimal'
         elif self.model.status == GRB.TIME_LIMIT:
-            status_str = 'timeout'
+            # Distinguish: feasible solution found vs. no solution within time limit
+            status_str = 'feasible' if self.model.SolCount > 0 else 'timeout'
         elif self.model.status == GRB.INFEASIBLE:
             status_str = 'infeasible'
         elif self.model.status == GRB.UNBOUNDED:
@@ -312,7 +397,10 @@ class MDVRP:
 
         if verbose:
             print(f"\nSolver Status: {status_str}")
-            print(f"Objective Value: {self.model.objVal:.2f}")
+            if self.model.SolCount > 0:
+                print(f"Objective Value: {self.model.objVal:.2f}")
+            else:
+                print("No feasible solution found")
             print(f"Runtime: {runtime:.2f}s")
 
         # Extract solution
@@ -330,7 +418,11 @@ class MDVRP:
         Returns:
             Solution dict with routes and metadata
         """
-        if self.model.status != GRB.OPTIMAL and self.model.status != GRB.TIME_LIMIT:
+        has_solution = (
+            self.model.SolCount > 0
+            and self.model.status in (GRB.OPTIMAL, GRB.TIME_LIMIT)
+        )
+        if not has_solution:
             return {
                 'objective': None,
                 'routes': {},

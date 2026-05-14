@@ -34,7 +34,7 @@ class MDVRPHGA:
     def __init__(self, depots, customers, vehicles, items, params,
                  population_size=20, generations=20, elite_size=3,
                  mutation_rate=0.2, crossover_rate=0.8, tournament_size=3,
-                 seed=None, data_source=None):
+                 seed=None, data_source=None, no_improve_limit=10):
         """
         Initialize HGA solver with DEAP framework.
 
@@ -76,10 +76,18 @@ class MDVRPHGA:
         # GA parameters
         self.population_size = population_size
         self.generations = generations
-        self.elite_size = elite_size
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
-        self.tournament_size = tournament_size
+
+        self.no_improve_limit = no_improve_limit
+
+        # Scale elite_size and tournament_size with customer count so larger
+        # instances preserve more diversity without hard-coding small defaults.
+        # elite_size  : grows 1 per 10 customers, capped at 6
+        # tournament_size: grows 1 per 10 customers, capped at 5
+        n_customers = len(self.customers)
+        self.elite_size = max(2, min(n_customers // 10, 6))
+        self.tournament_size = max(2, min(n_customers // 10, 5))
 
         # Detect if params use NumPy arrays or dicts
         self.uses_numpy = isinstance(params.get('dist'), np.ndarray)
@@ -210,38 +218,33 @@ class MDVRPHGA:
         return chromosome
 
     def _decode_chromosome(self, chromosome: List) -> Dict:
-        """Decode linear chromosome to routes dictionary"""
+        """Decode linear chromosome to routes using positional vehicle assignment.
+
+        Each depot marker in chromosome[1:] ends one vehicle's segment and
+        advances to the next vehicle in self.vehicles order. This correctly
+        handles multiple vehicles that share the same depot ID.
+        """
         routes = {k: [] for k in self.vehicles}
 
         if not chromosome:
             return routes
 
-        # Find start depot (first element)
-        current_depot = chromosome[0]
-
-        # Build routes by parsing chromosome
+        depot_set = set(self.depots)
+        vehicle_idx = 0
         current_route = []
+
         for gene in chromosome[1:]:
-            if gene in self.depots:
-                # This is a depot, save current route and start new one
-                if current_route:
-                    # Find which vehicle owns this depot
-                    for v in self.vehicles:
-                        if self.depot_for_vehicle[v] == current_depot:
-                            routes[v] = list(current_route)
-                            break
-                current_depot = gene
+            if gene in depot_set:
+                if vehicle_idx < len(self.vehicles):
+                    routes[self.vehicles[vehicle_idx]] = list(current_route)
+                    vehicle_idx += 1
                 current_route = []
-            else:
-                # This is a customer
+            elif gene is not None:
                 current_route.append(gene)
 
-        # Don't forget the last route
-        if current_route:
-            for v in self.vehicles:
-                if self.depot_for_vehicle[v] == current_depot:
-                    routes[v] = list(current_route)
-                    break
+        # Trailing customers not followed by a depot marker
+        if current_route and vehicle_idx < len(self.vehicles):
+            routes[self.vehicles[vehicle_idx]] = list(current_route)
 
         return routes
 
@@ -298,13 +301,13 @@ class MDVRPHGA:
             if self.uses_numpy:
                 # Use NumPy arrays
                 time_matrix = self.T[vehicle]
-                indices = [self.node_to_idx[depot]]
-                indices.extend(self.node_to_idx[c] for c in route)
-                indices.append(self.node_to_idx[depot])
-
-                for i in range(len(indices) - 1):
-                    route_dist += self.dist[indices[i]][indices[i+1]]
-                    route_time += time_matrix[indices[i]][indices[i+1]]
+                indices = np.array(
+                    [self.node_to_idx[depot]]
+                    + [self.node_to_idx[c] for c in route]
+                    + [self.node_to_idx[depot]]
+                )
+                route_dist += float(np.sum(self.dist[indices[:-1], indices[1:]]))
+                route_time += float(np.sum(time_matrix[indices[:-1], indices[1:]]))
             else:
                 # Use dict-based matrices
                 prev = depot
@@ -339,65 +342,43 @@ class MDVRPHGA:
 
     def _ox_crossover(self, parent1: List, parent2: List) -> Tuple[List, List]:
         """
-        Vehicle-scoped Order Crossover (OX) operator for MDVRP.
+        Global Order Crossover (OX) for MDVRP.
 
-        Applies OX independently to each vehicle's customer segment,
-        preserving depot positions and vehicle-depot assignments.
+        Strips depot markers and applies standard OX on the full customer
+        permutation so customers can migrate between vehicles. Each offspring
+        inherits the vehicle-size distribution from its corresponding parent,
+        preserving feasible load balance while mixing customer assignments.
         """
-        # Decode parents to routes dict
-        routes1 = self._decode_chromosome(parent1)
-        routes2 = self._decode_chromosome(parent2)
+        depot_set = set(self.depots)
 
-        # Apply OX to each vehicle's route independently
-        offspring_routes1 = {}
-        offspring_routes2 = {}
+        cust1 = [g for g in parent1 if g not in depot_set and g is not None]
+        cust2 = [g for g in parent2 if g not in depot_set and g is not None]
 
+        off1_customers = self._ox_single(cust1, cust2)
+        off2_customers = self._ox_single(cust2, cust1)
+
+        parent1_routes = self._decode_chromosome(parent1)
+        parent2_routes = self._decode_chromosome(parent2)
+
+        routes1 = self._assign_by_vehicle_sizes(off1_customers, parent1_routes)
+        routes2 = self._assign_by_vehicle_sizes(off2_customers, parent2_routes)
+
+        return self._encode_from_routes(routes1), self._encode_from_routes(routes2)
+
+    def _assign_by_vehicle_sizes(self, customers: List, parent_routes: Dict) -> Dict:
+        """
+        Assign a flat customer list to vehicles preserving the parent's
+        vehicle-size distribution (vehicle i gets the same count it had in parent).
+        """
+        routes = {k: [] for k in self.vehicles}
+        idx = 0
         for vehicle in self.vehicles:
-            route1 = routes1[vehicle]
-            route2 = routes2[vehicle]
-
-            # Apply OX to customer lists
-            offspring1_route, offspring2_route = self._ox_on_list(route1, route2)
-
-            offspring_routes1[vehicle] = offspring1_route
-            offspring_routes2[vehicle] = offspring2_route
-
-        # Re-encode to chromosomes
-        offspring1 = self._encode_from_routes(offspring_routes1)
-        offspring2 = self._encode_from_routes(offspring_routes2)
-
-        return offspring1, offspring2
-
-    def _ox_on_list(self, list1: List, list2: List) -> Tuple[List, List]:
-        """
-        Apply Order Crossover (OX) to two lists independently.
-        Handles different-sized routes by applying OX separately.
-
-        Args:
-            list1: First parent list (customers only, no depots)
-            list2: Second parent list (customers only, no depots)
-
-        Returns:
-            Tuple of two offspring lists
-        """
-        # Handle empty routes
-        if not list1 or not list2:
-            return list(list1), list(list2)
-
-        size1 = len(list1)
-        size2 = len(list2)
-
-        # If routes are too short, just return copies
-        if size1 < 2 or size2 < 2:
-            return list(list1), list(list2)
-
-        # Apply OX to offspring1 (from list1, using list2)
-        offspring1 = self._ox_single(list1, list2)
-
-        # Apply OX to offspring2 (from list2, using list1)
-        offspring2 = self._ox_single(list2, list1)
-
-        return offspring1, offspring2
+            size = len(parent_routes[vehicle])
+            routes[vehicle] = list(customers[idx:idx + size])
+            idx += size
+        if idx < len(customers):
+            routes[self.vehicles[-1]].extend(customers[idx:])
+        return routes
 
     def _ox_single(self, primary: List, secondary: List) -> List:
         """
@@ -426,12 +407,14 @@ class MDVRPHGA:
 
         # Copy segment from primary
         offspring[a:b+1] = primary[a:b+1]
+        placed = set(primary[a:b+1])
 
         # Fill remaining positions from secondary, maintaining order
         current_pos = (b + 1) % size
         for gene in secondary[b+1:] + secondary[:b+1]:
-            if gene not in offspring:
+            if gene not in placed:
                 offspring[current_pos] = gene
+                placed.add(gene)
                 current_pos = (current_pos + 1) % size
 
         return offspring
@@ -478,7 +461,7 @@ class MDVRPHGA:
 
             improved = True
             iterations = 0
-            max_iterations = 10  # Limit iterations to avoid excessive computation
+            max_iterations = 5
 
             while improved and iterations < max_iterations:
                 improved = False
@@ -504,92 +487,89 @@ class MDVRPHGA:
 
     def _relocation_local_search(self, individual: List, routes: Dict) -> List:
         """
-        Apply relocation local search to improve routes.
+        Apply relocation local search until no improvement (both phases), per the PDF spec.
 
-        Two-phase approach:
-        1. Intra-route: Move customer to different position in same route
-        2. Inter-route: Move customer to different route (only if intra doesn't improve)
-
-        Returns:
-            Improved chromosome
+        Loops intra-route (all vehicles) then inter-route until neither finds improvement,
+        mirroring how 2-opt already iterates. Safety cap of 20 iterations.
         """
-        improved = False
+        max_iter = 10
+        for _ in range(max_iter):
+            any_improved = False
 
-        # Phase 1: Intra-route relocation
-        for vehicle in self.vehicles:
-            route = routes[vehicle]
-            # Filter None values
-            route = [c for c in route if c is not None]
-
-            if len(route) < 2:
-                continue
-
-            # Find best intra-route move
-            best_move = self._find_best_intra_relocation(vehicle, route)
-
-            if best_move:
-                position, new_position = best_move
-                # Apply the move
-                customer = route[position]
-                route.pop(position)
-                route.insert(new_position, customer)
-                # Update routes dict
+            # Phase 1: Intra-route relocation for each vehicle independently
+            for vehicle in self.vehicles:
+                route = [c for c in routes[vehicle] if c is not None]
+                if len(route) < 2:
+                    routes[vehicle] = route
+                    continue
+                best_move = self._find_best_intra_relocation(vehicle, route)
+                if best_move:
+                    position, new_position = best_move
+                    customer = route[position]
+                    route.pop(position)
+                    route.insert(new_position, customer)
+                    any_improved = True
                 routes[vehicle] = route
-                improved = True
 
-        # Phase 2: Inter-route relocation (only if intra didn't help)
-        if not improved:
+            # Phase 2: Inter-route relocation (always runs, not conditional on intra)
             best_inter_move = self._find_best_inter_relocation(routes)
             if best_inter_move:
-                vehicle, customer, target_vehicle, position = best_inter_move
-                # Move customer from current route to target route
-                routes[vehicle].remove(customer)
+                source_vehicle, customer, target_vehicle, position = best_inter_move
+                routes[source_vehicle].remove(customer)
                 routes[target_vehicle].insert(position, customer)
-                improved = True
+                any_improved = True
 
-        # Re-encode to chromosome
+            if not any_improved:
+                break
+
         return self._encode_from_routes(routes)
+
+    def _d(self, a, b) -> float:
+        """Single-edge distance lookup (avoids full route-distance call overhead)."""
+        if self.uses_numpy:
+            return float(self.dist[self.node_to_idx[a]][self.node_to_idx[b]])
+        return float(self.dist[a][b])
 
     def _find_best_intra_relocation(self, vehicle: str, route: List) -> Optional[Tuple]:
         """
-        Find best intra-route relocation move.
+        Find best intra-route relocation using incremental edge costs (O(1) per candidate).
 
         Returns:
-            Tuple of (position_to_remove, new_position, new_distance) or None
+            Tuple of (position_to_remove, new_position) or None
         """
+        if len(route) < 2:
+            return None
+
+        depot = self.depot_for_vehicle[vehicle]
+        n = len(route)
         best_improvement = 0
         best_move = None
 
-        current_distance = self._calculate_route_distance(vehicle, route)
+        for pos in range(n):
+            customer = route[pos]
+            prev_s = route[pos - 1] if pos > 0 else depot
+            next_s = route[pos + 1] if pos < n - 1 else depot
+            removal_gain = self._d(prev_s, customer) + self._d(customer, next_s) - self._d(prev_s, next_s)
 
-        for position in range(len(route)):
-            customer = route[position]
+            route_minus = route[:pos] + route[pos + 1:]
+            m = len(route_minus)
 
-            # Try moving to each other position
-            for new_position in range(len(route)):
-                if new_position == position:
+            for new_pos in range(m + 1):
+                if new_pos == pos:
                     continue
-
-                # Create test route
-                test_route = route[:]
-                test_route.pop(position)
-                test_route.insert(new_position, customer)
-
-                # Calculate new distance
-                new_distance = self._calculate_route_distance(vehicle, test_route)
-                improvement = current_distance - new_distance
-
+                prev_t = route_minus[new_pos - 1] if new_pos > 0 else depot
+                next_t = route_minus[new_pos] if new_pos < m else depot
+                insertion_cost = self._d(prev_t, customer) + self._d(customer, next_t) - self._d(prev_t, next_t)
+                improvement = removal_gain - insertion_cost
                 if improvement > best_improvement:
                     best_improvement = improvement
-                    best_move = (position, new_position)
+                    best_move = (pos, new_pos)
 
-        if best_improvement > 0:
-            return best_move
-        return None
+        return best_move if best_improvement > 0 else None
 
     def _find_best_inter_relocation(self, routes: Dict) -> Optional[Tuple]:
         """
-        Find best inter-route relocation move.
+        Find best inter-route relocation using incremental edge costs (O(1) per candidate).
 
         Returns:
             Tuple of (source_vehicle, customer, target_vehicle, position) or None
@@ -597,50 +577,44 @@ class MDVRPHGA:
         best_improvement = 0
         best_move = None
 
-        for source_vehicle in self.vehicles:
-            source_route = routes[source_vehicle]
-            source_route = [c for c in source_route if c is not None]
+        # Pre-compute clean routes and loads once
+        clean_routes = {v: [c for c in routes[v] if c is not None] for v in self.vehicles}
+        route_loads = {v: sum(self.demand[c] for c in clean_routes[v]) for v in self.vehicles}
 
-            for customer in source_route[:]:  # Copy to safely modify during iteration
-                # Try moving to each other vehicle
+        for source_vehicle in self.vehicles:
+            source_route = clean_routes[source_vehicle]
+            if not source_route:
+                continue
+            source_depot = self.depot_for_vehicle[source_vehicle]
+            sn = len(source_route)
+
+            for cust_idx, customer in enumerate(source_route):
+                prev_s = source_route[cust_idx - 1] if cust_idx > 0 else source_depot
+                next_s = source_route[cust_idx + 1] if cust_idx < sn - 1 else source_depot
+                removal_gain = (self._d(prev_s, customer) + self._d(customer, next_s)
+                                - self._d(prev_s, next_s))
+                cust_demand = self.demand[customer]
+
                 for target_vehicle in self.vehicles:
                     if target_vehicle == source_vehicle:
                         continue
+                    target_route = clean_routes[target_vehicle]
+                    if route_loads[target_vehicle] + cust_demand > self.Q[target_vehicle]:
+                        continue
 
-                    target_route = routes[target_vehicle]
-                    target_route = [c for c in target_route if c is not None]
-
-                    # Try each position in target route
-                    for position in range(len(target_route) + 1):
-                        # Check capacity constraint
-                        current_load = sum(self.demand[c] for c in source_route if c is not None)
-                        customer_demand = self.demand[customer]
-                        target_load = sum(self.demand[c] for c in target_route if c is not None)
-
-                        if target_load + customer_demand > self.Q[target_vehicle]:
-                            continue  # Would exceed capacity
-
-                        # Calculate improvement
-                        old_dist = (self._calculate_route_distance(source_vehicle, source_route) +
-                                   self._calculate_route_distance(target_vehicle, target_route))
-
-                        # Create test routes
-                        test_source = [c for c in source_route if c != customer]
-                        test_target = target_route[:]
-                        test_target.insert(position, customer)
-
-                        new_dist = (self._calculate_route_distance(source_vehicle, test_source) +
-                                   self._calculate_route_distance(target_vehicle, test_target))
-
-                        improvement = old_dist - new_dist
-
+                    target_depot = self.depot_for_vehicle[target_vehicle]
+                    m = len(target_route)
+                    for new_pos in range(m + 1):
+                        prev_t = target_route[new_pos - 1] if new_pos > 0 else target_depot
+                        next_t = target_route[new_pos] if new_pos < m else target_depot
+                        insertion_cost = (self._d(prev_t, customer) + self._d(customer, next_t)
+                                          - self._d(prev_t, next_t))
+                        improvement = removal_gain - insertion_cost
                         if improvement > best_improvement:
                             best_improvement = improvement
-                            best_move = (source_vehicle, customer, target_vehicle, position)
+                            best_move = (source_vehicle, customer, target_vehicle, new_pos)
 
-        if best_improvement > 0:
-            return best_move
-        return None
+        return best_move if best_improvement > 0 else None
 
     def _calculate_route_distance(self, vehicle: str, route: List) -> float:
         """Calculate total distance for a route."""
@@ -670,14 +644,12 @@ class MDVRPHGA:
         if self.uses_numpy:
             # Use NumPy arrays
             time_matrix = self.T[vehicle]
-            indices = [self.node_to_idx[depot]]
-            indices.extend(self.node_to_idx[c] for c in route)
-            indices.append(self.node_to_idx[depot])
-
-            total_time = 0.0
-            for i in range(len(indices) - 1):
-                total_time += time_matrix[indices[i]][indices[i+1]]
-            return total_time
+            indices = np.array(
+                [self.node_to_idx[depot]]
+                + [self.node_to_idx[c] for c in route]
+                + [self.node_to_idx[depot]]
+            )
+            return float(np.sum(time_matrix[indices[:-1], indices[1:]]))
         else:
             # Use dict-based
             total_time = 0.0
@@ -849,6 +821,10 @@ class MDVRPHGA:
         else:
             pbar = None
 
+        # Stagnation tracking
+        best_fitness_ever = float('inf')
+        no_improve_count = 0
+
         # Evolution loop
         for gen in range(generations):
             # Check time limit
@@ -912,6 +888,22 @@ class MDVRPHGA:
 
             # Update hall of fame
             hof.update(population)
+
+            # Stagnation check: significant improvement = > 0.01% reduction
+            current_best = hof[0].fitness.values[0] if len(hof) > 0 else float('inf')
+            if best_fitness_ever - current_best > 1e-4 * max(best_fitness_ever, 1.0):
+                best_fitness_ever = current_best
+                no_improve_count = 0
+            else:
+                no_improve_count += 1
+
+            if no_improve_count >= self.no_improve_limit:
+                if verbose:
+                    print(f"\n[STAGNATION] No significant improvement for {self.no_improve_limit} generations. Stopping early.")
+                if pbar:
+                    pbar.close()
+                best = hof[0] if len(hof) > 0 else population[0]
+                return self._format_solution(best, start_time, gen + 1), 'stagnation'
 
             # Update progress
             if pbar:

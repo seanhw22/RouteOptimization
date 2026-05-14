@@ -176,6 +176,7 @@ class ExperimentTracker:
         progress_pct: Optional[int] = None,
         best_objective: Optional[float] = None,
         log_line: Optional[str] = None,
+        weight_violated: Optional[bool] = None,
     ) -> None:
         """Patch live progress fields on an experiment.
 
@@ -200,6 +201,9 @@ class ExperimentTracker:
 
         if best_objective is not None:
             exp.best_objective = float(best_objective)
+
+        if weight_violated is not None:
+            exp.weight_violated = weight_violated
 
         if log_line:
             exp.append_log(log_line)

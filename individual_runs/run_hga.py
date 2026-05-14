@@ -37,7 +37,7 @@ def run_for_experiment(experiment_id: int, verbose: bool = True) -> int:
 
     try:
         experiment, data = load_experiment_data(experiment_id)
-        callback = make_progress_callback(experiment_id, every_n=5)
+        callback = make_progress_callback(experiment_id, every_n=1)
 
         solver = MDVRPHGA(
             depots=data['depots'],
@@ -49,6 +49,7 @@ def run_for_experiment(experiment_id: int, verbose: bool = True) -> int:
             generations=experiment.generations or 100,
             mutation_rate=experiment.mutation_rate or 0.2,
             crossover_rate=experiment.crossover_rate or 0.8,
+            no_improve_limit=experiment.no_improve_limit or 20,
             seed=experiment.seed or 42,
         )
         solution, status = solver.solve(
@@ -64,6 +65,9 @@ def run_for_experiment(experiment_id: int, verbose: bool = True) -> int:
             depot_for_vehicle=data['depot_for_vehicle'],
             distance_lookup=data['dist'],
             time_lookup=data['T'],
+            vehicle_capacity=data.get('vehicle_capacity'),
+            customer_orders=data.get('customer_orders'),
+            item_weights=data.get('item_weights'),
         )
         return 0
     except SystemExit:

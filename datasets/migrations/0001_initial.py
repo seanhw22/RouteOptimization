@@ -34,6 +34,7 @@ class Migration(migrations.Migration):
             name='Item',
             fields=[
                 ('item_id', models.CharField(max_length=50, primary_key=True, serialize=False)),
+                ('name', models.CharField(blank=True, default='', max_length=50)),
                 ('weight_kg', models.DecimalField(decimal_places=2, max_digits=8)),
                 ('expiry_hours', models.IntegerField()),
                 ('dataset', models.ForeignKey(db_column='dataset_id', on_delete=django.db.models.deletion.CASCADE, related_name='items', to='datasets.dataset')),
@@ -58,6 +59,7 @@ class Migration(migrations.Migration):
             name='Depot',
             fields=[
                 ('depot_id', models.CharField(max_length=50, primary_key=True, serialize=False)),
+                ('name', models.CharField(blank=True, default='', max_length=50)),
                 ('dataset', models.ForeignKey(db_column='dataset_id', on_delete=django.db.models.deletion.CASCADE, related_name='depots', to='datasets.dataset')),
                 ('node', models.ForeignKey(db_column='node_id', on_delete=django.db.models.deletion.CASCADE, related_name='depots', to='datasets.node')),
             ],
@@ -69,6 +71,7 @@ class Migration(migrations.Migration):
             name='Customer',
             fields=[
                 ('customer_id', models.CharField(max_length=50, primary_key=True, serialize=False)),
+                ('name', models.CharField(blank=True, default='', max_length=50)),
                 ('deadline_hours', models.IntegerField()),
                 ('dataset', models.ForeignKey(db_column='dataset_id', on_delete=django.db.models.deletion.CASCADE, related_name='customers', to='datasets.dataset')),
                 ('node', models.ForeignKey(db_column='node_id', on_delete=django.db.models.deletion.CASCADE, related_name='customers', to='datasets.node')),
@@ -107,6 +110,7 @@ class Migration(migrations.Migration):
             name='Vehicle',
             fields=[
                 ('vehicle_id', models.CharField(max_length=50, primary_key=True, serialize=False)),
+                ('name', models.CharField(blank=True, default='', max_length=50)),
                 ('vehicle_type', models.CharField(default='truck', max_length=50)),
                 ('capacity_kg', models.DecimalField(decimal_places=2, max_digits=8)),
                 ('max_operational_hrs', models.DecimalField(decimal_places=2, max_digits=8)),

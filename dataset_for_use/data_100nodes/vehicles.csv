@@ -1,0 +1,13 @@
+vehicle_id,name,depot_id,vehicle_type,capacity_kg,max_operational_hrs,speed_kmh
+V1,Truk 1,D1,truck,50,9,42
+V2,Van 1,D2,van,30,9,38
+V3,Truk 2,D3,truck,50,8,42
+V4,Van 2,D4,van,30,9,38
+V5,Truk 3,D5,truck,50,8,38
+V6,Van 3,D1,van,30,7,38
+V7,Truk 4,D2,truck,50,8,40
+V8,Van 4,D3,van,30,7,40
+V9,Truk 5,D4,truck,50,10,42
+V10,Van 5,D5,van,30,8,42
+V11,Truk 6,D1,truck,50,10,40
+V12,Van 6,D2,van,30,10,38

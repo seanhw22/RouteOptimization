@@ -1,0 +1,11 @@
+customer_id,item_id,quantity
+C1,I1,2
+C1,I2,0
+C2,I1,0
+C2,I2,3
+C3,I1,2
+C3,I2,2
+C4,I1,1
+C4,I2,0
+C5,I1,0
+C5,I2,1

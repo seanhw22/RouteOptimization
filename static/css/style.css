@@ -188,6 +188,9 @@ code { overflow-wrap: break-word; word-break: break-all; }
 .data th { font-weight: 600; background: var(--bg); }
 .data tbody tr:hover { background: #f8f9fb; }
 .data td.stops { word-break: break-word; }
+.data tr.row-warn { background: #fef9ec; }
+.data tr.row-warn:hover { background: #fef3c7; }
+.data td.cell-warn { color: var(--warn); font-weight: 600; }
 
 /* ---- Forms ---- */
 

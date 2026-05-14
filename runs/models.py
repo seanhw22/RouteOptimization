@@ -73,6 +73,7 @@ class Experiment(models.Model):
     crossover_rate = models.FloatField(null=True, blank=True)
     seed = models.IntegerField(null=True, blank=True)
     generations = models.IntegerField(null=True, blank=True)
+    no_improve_limit = models.IntegerField(null=True, blank=True)
     time_limit = models.IntegerField(null=True, blank=True)
 
     # Lifecycle
@@ -80,6 +81,7 @@ class Experiment(models.Model):
     pid = models.IntegerField(null=True, blank=True)
     progress_pct = models.IntegerField(default=0)
     best_objective = models.FloatField(null=True, blank=True)
+    weight_violated = models.BooleanField(default=False)
     progress_log = models.JSONField(default=list, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)

@@ -17,7 +17,13 @@
             <td>{% if d.milp_available %}<span class="badge ok">available</span>{% else %}<span class="badge muted">> 25 nodes</span>{% endif %}</td>
             <td>{{ d.created_at|date:"Y-m-d H:i" }}</td>
             <td>{% if d.expires_at %}{{ d.expires_at|date:"Y-m-d" }}{% else %}—{% endif %}</td>
-            <td><a class="btn" href="{% url 'runs:configure' d.dataset_id %}">Run solver</a></td>
+            <td class="btn-group">
+                <a class="btn" href="{% url 'runs:configure' d.dataset_id %}">Run solver</a>
+                <form method="post" action="{% url 'datasets:delete' d.dataset_id %}" onsubmit="return confirm('Delete dataset &quot;{{ d.name }}&quot;? This cannot be undone.')">
+                    {% csrf_token %}
+                    <button class="btn danger" type="submit">Delete</button>
+                </form>
+            </td>
         </tr>
         {% endfor %}
         </tbody>

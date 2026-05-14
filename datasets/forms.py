@@ -12,10 +12,10 @@ class DatasetUploadForm(forms.Form):
 
     xlsx = forms.FileField(required=False, help_text='Single .xlsx with all five sheets.')
 
-    depots_csv = forms.FileField(required=False, help_text='depot_id, x, y')
-    customers_csv = forms.FileField(required=False, help_text='customer_id, x, y, deadline_hours')
-    vehicles_csv = forms.FileField(required=False, help_text='vehicle_id, depot_id, vehicle_type, capacity_kg, max_operational_hrs, speed_kmh')
-    items_csv = forms.FileField(required=False, help_text='item_id, weight_kg, expiry_hours')
+    depots_csv = forms.FileField(required=False, help_text='depot_id, x, y [, name]')
+    customers_csv = forms.FileField(required=False, help_text='customer_id, x, y, deadline_hours [, name]')
+    vehicles_csv = forms.FileField(required=False, help_text='vehicle_id, depot_id, vehicle_type, capacity_kg, max_operational_hrs, speed_kmh [, name]')
+    items_csv = forms.FileField(required=False, help_text='item_id, weight_kg, expiry_hours [, name]')
     orders_csv = forms.FileField(required=False, help_text='customer_id, item_id, quantity')
 
     def clean(self):

@@ -59,6 +59,7 @@ class Depot(models.Model):
     dataset = models.ForeignKey(
         Dataset, on_delete=models.CASCADE, related_name='depots', db_column='dataset_id'
     )
+    name = models.CharField(max_length=50, blank=True, default='')
 
     class Meta:
         db_table = 'depots'
@@ -76,6 +77,7 @@ class Customer(models.Model):
     dataset = models.ForeignKey(
         Dataset, on_delete=models.CASCADE, related_name='customers', db_column='dataset_id'
     )
+    name = models.CharField(max_length=50, blank=True, default='')
     deadline_hours = models.IntegerField()
 
     class Meta:
@@ -94,6 +96,7 @@ class Vehicle(models.Model):
     dataset = models.ForeignKey(
         Dataset, on_delete=models.CASCADE, related_name='vehicles', db_column='dataset_id'
     )
+    name = models.CharField(max_length=50, blank=True, default='')
     vehicle_type = models.CharField(max_length=50, default='truck')
     capacity_kg = models.DecimalField(max_digits=8, decimal_places=2)
     max_operational_hrs = models.DecimalField(max_digits=8, decimal_places=2)
@@ -112,6 +115,7 @@ class Item(models.Model):
     dataset = models.ForeignKey(
         Dataset, on_delete=models.CASCADE, related_name='items', db_column='dataset_id'
     )
+    name = models.CharField(max_length=50, blank=True, default='')
     weight_kg = models.DecimalField(max_digits=8, decimal_places=2)
     expiry_hours = models.IntegerField()
 

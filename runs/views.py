@@ -81,6 +81,7 @@ def status(request, batch_id):
             'experiment_id': exp.experiment_id,
             'algorithm': exp.algorithm,
             'status': exp.status,
+            'weight_violated': exp.weight_violated,
             'progress_pct': exp.progress_pct,
             'best_objective': exp.best_objective,
             'elapsed_seconds': elapsed,

@@ -54,6 +54,9 @@ def run_for_experiment(experiment_id: int, verbose: bool = True) -> int:
             depot_for_vehicle=data['depot_for_vehicle'],
             distance_lookup=data['dist'],
             time_lookup=data['T'],
+            vehicle_capacity=data.get('vehicle_capacity'),
+            customer_orders=data.get('customer_orders'),
+            item_weights=data.get('item_weights'),
         )
         return 0
     except SystemExit:

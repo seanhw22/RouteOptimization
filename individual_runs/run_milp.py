@@ -12,7 +12,6 @@ if str(REPO_ROOT) not in sys.path:
 from individual_runs.run_config import (  # noqa: E402
     finalize_experiment,
     load_experiment_data,
-    make_progress_callback,
     mark_failed,
     setup_django,
 )
@@ -34,7 +33,6 @@ def run_for_experiment(experiment_id: int, verbose: bool = True) -> int:
 
     try:
         experiment, data = load_experiment_data(experiment_id)
-        callback = make_progress_callback(experiment_id, every_n=1)
 
         solver = MDVRP(
             depots=data['depots'],
@@ -44,11 +42,22 @@ def run_for_experiment(experiment_id: int, verbose: bool = True) -> int:
             params=data,
         )
         solver.build_model()
+        tracker.update_progress(
+            experiment_id=experiment_id,
+            log_line=(
+                f"Model built: {solver.model.NumVars} variables, "
+                f"{solver.model.NumConstrs} constraints"
+            ),
+        )
         time_limit = experiment.time_limit or 3600
+        tracker.update_progress(
+            experiment_id=experiment_id,
+            log_line=f"Starting optimization (time limit: {time_limit}s, MIP gap: 1%)",
+        )
         solution, status = solver.solve(
             time_limit=time_limit,
             mip_gap=0.01,
-            progress_callback=callback,
+            progress_callback=None,
             verbose=verbose,
         )
         if solution is not None:
@@ -61,6 +70,9 @@ def run_for_experiment(experiment_id: int, verbose: bool = True) -> int:
             depot_for_vehicle=data['depot_for_vehicle'],
             distance_lookup=data['dist'],
             time_lookup=data['T'],
+            vehicle_capacity=data.get('vehicle_capacity'),
+            customer_orders=data.get('customer_orders'),
+            item_weights=data.get('item_weights'),
         )
         return 0
     except SystemExit:

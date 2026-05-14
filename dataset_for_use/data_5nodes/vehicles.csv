@@ -1,0 +1,3 @@
+vehicle_id,name,depot_id,vehicle_type,capacity_kg,max_operational_hrs,speed_kmh
+V1,Truk 01,D1,truck,40,8,40
+V2,Truk 02,D2,truck,45,10,40

@@ -85,9 +85,9 @@ def detail(request, dataset_id):
 
     depots = list(dataset.depots.select_related('node').all())
     customers = list(dataset.customers.select_related('node').all())
-    vehicles = list(dataset.vehicles.all())
+    vehicles = list(dataset.vehicles.select_related('depot').all())
     items = list(dataset.items.all())
-    orders = list(dataset.orders.all())
+    orders = list(dataset.orders.select_related('customer', 'item').all())
 
     counts = {
         'depots': len(depots),
@@ -116,6 +116,10 @@ def detail(request, dataset_id):
         'milp_available': counts['nodes'] <= 25,
         'run_batches': run_batches,
         'share_token': str(dataset.share_token) if dataset.share_token else '',
+        'has_depot_names': any(d.name for d in depots),
+        'has_customer_names': any(c.name for c in customers),
+        'has_vehicle_names': any(v.name for v in vehicles),
+        'has_item_names': any(it.name for it in items),
     })
 
 
@@ -126,3 +130,30 @@ def generate_share_link(request, dataset_id):
         dataset.share_token = uuid.uuid4()
         dataset.save(update_fields=['share_token'])
     return redirect('datasets:detail', dataset_id=dataset_id)
+
+
+@require_POST
+def rename_dataset(request, dataset_id):
+    dataset = get_owned_dataset_or_404(request, dataset_id)
+    new_name = request.POST.get('name', '').strip()
+    if new_name:
+        dataset.name = new_name
+        dataset.save(update_fields=['name'])
+        messages.success(request, f'Dataset renamed to "{new_name}".')
+    else:
+        messages.error(request, 'Name cannot be empty.')
+    return redirect('datasets:detail', dataset_id=dataset_id)
+
+
+@require_POST
+def delete_dataset(request, dataset_id):
+    dataset = get_owned_dataset_or_404(request, dataset_id)
+    name = dataset.name
+    dataset.delete()
+    if not request.user.is_authenticated:
+        guest_ids = list(request.session.get('guest_datasets', []))
+        if dataset_id in guest_ids:
+            guest_ids.remove(dataset_id)
+            request.session['guest_datasets'] = guest_ids
+    messages.success(request, f'Dataset "{name}" deleted.')
+    return redirect('datasets:list')

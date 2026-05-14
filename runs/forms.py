@@ -13,6 +13,8 @@ class SolverConfigForm(forms.Form):
     population_size = forms.IntegerField(min_value=2, max_value=2000, initial=50)
     mutation_rate = forms.FloatField(min_value=0.0, max_value=1.0, initial=0.1)
     crossover_rate = forms.FloatField(min_value=0.0, max_value=1.0, initial=0.8)
+    no_improve_limit = forms.IntegerField(min_value=1, max_value=1000, initial=20,
+                                          help_text='Stop early if no significant improvement for this many generations.')
     seed = forms.IntegerField(initial=42)
 
     # MILP parameter

@@ -32,22 +32,28 @@
         <div class="card" id="card-{{ exp.experiment_id }}">
             <div class="card-header row spread">
                 <h2>{{ exp.algorithm }}</h2>
-                <span class="badge status-badge {{ exp.status }}" id="badge-{{ exp.experiment_id }}">{{ exp.status }}</span>
+                <span class="badge status-badge {{ exp.status }}" id="badge-{{ exp.experiment_id }}">{{ exp.status }}{% if exp.weight_violated %} - weight exceeded{% endif %}</span>
             </div>
 
+            {% if exp.algorithm != 'MILP' %}
             <div class="progress-wrap">
                 <div class="progress-bar">
                     <div class="progress-fill" id="fill-{{ exp.experiment_id }}" style="width:0%"></div>
                 </div>
                 <span class="progress-label" id="pct-{{ exp.experiment_id }}">0%</span>
             </div>
+            {% endif %}
 
             <dl class="card-meta">
                 <dt>Best</dt><dd id="best-{{ exp.experiment_id }}">—</dd>
                 <dt>Elapsed</dt><dd id="elapsed-{{ exp.experiment_id }}">0s</dd>
             </dl>
 
+            {% if exp.algorithm != 'MILP' %}
             <pre class="log-tail" id="log-{{ exp.experiment_id }}"></pre>
+            {% else %}
+            <p class="muted" style="margin-top:0.5rem;font-size:0.9em">Optimization running — results will appear when complete.</p>
+            {% endif %}
 
             {% if exp.algorithm == 'MILP' %}
             <button class="btn warn skip-milp" id="kill-{{ exp.experiment_id }}"
@@ -84,7 +90,12 @@
 
     function updateCard(exp) {
         const badge = document.getElementById('badge-' + exp.experiment_id);
-        if (badge) { badge.textContent = exp.status; badge.className = 'badge status-badge ' + statusCls(exp.status); }
+        if (badge) {
+            badge.textContent = (exp.status === 'completed' && exp.weight_violated)
+                ? 'completed - weight exceeded'
+                : exp.status;
+            badge.className = 'badge status-badge ' + statusCls(exp.status);
+        }
 
         const fill = document.getElementById('fill-' + exp.experiment_id);
         if (fill) fill.style.width = (exp.progress_pct || 0) + '%';

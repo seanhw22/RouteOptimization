@@ -71,9 +71,11 @@ def _build_problem_data(dataset_id):
     }
 
 
-def _build_geojson(solution, coordinates):
+def _build_geojson(solution, coordinates, node_name_map=None):
     """Return a GeoJSON FeatureCollection dict built from solution + coordinates."""
     from geojson import Feature, FeatureCollection, LineString, Point
+    if node_name_map is None:
+        node_name_map = {}
 
     routes = solution['routes']
     depot_for_vehicle = solution.get('depot_for_vehicle', {})
@@ -102,6 +104,7 @@ def _build_geojson(solution, coordinates):
             geometry=Point((lon, lat)),
             properties={
                 'id': node_id,
+                'name': node_name_map.get(node_id, node_id),
                 'type': 'depot' if is_depot else 'customer',
                 'marker-color': color,
                 'marker-size': 'large' if is_depot else 'medium',
@@ -147,6 +150,18 @@ def dashboard(request, batch_id):
     dataset_id = batch.dataset_id
     coordinates = _build_coordinates(dataset_id)
 
+    vehicles_qs      = list(Vehicle.objects.filter(dataset_id=dataset_id))
+    vehicle_capacity = {v.vehicle_id: float(v.capacity_kg) for v in vehicles_qs}
+    vehicle_name_map = {v.vehicle_id: v.name or v.vehicle_id for v in vehicles_qs}
+
+    node_name_map = {}
+    for d in Depot.objects.filter(dataset_id=dataset_id):
+        if d.name:
+            node_name_map[d.node_id] = d.name
+    for c in Customer.objects.filter(dataset_id=dataset_id):
+        if c.name:
+            node_name_map[c.node_id] = c.name
+
     algo_items = []
     chart_labels = []
     chart_values = []
@@ -164,7 +179,7 @@ def dashboard(request, batch_id):
 
         if exp.status == 'completed':
             solution = _build_solution(exp.experiment_id, dataset_id)
-            geojson_dict = _build_geojson(solution, coordinates)
+            geojson_dict = _build_geojson(solution, coordinates, node_name_map)
             item['geojson_json'] = json.dumps(geojson_dict)
 
             all_customer_nodes = set()
@@ -186,16 +201,22 @@ def dashboard(request, batch_id):
                 stops_list = ([depot] + nodes + [depot]) if depot else nodes
                 dist = float(info.get('distance', 0))
                 total_dist += dist
+                weight = round(sum(customer_weights.get(n, 0) for n in nodes), 2)
+                capacity = vehicle_capacity.get(v_id)
                 route_rows.append({
                     'vehicle_id': v_id,
-                    'stops': ' → '.join(str(n) for n in stops_list),
+                    'vehicle_name': vehicle_name_map.get(v_id, v_id),
+                    'stops': ' → '.join(node_name_map.get(n, n) for n in stops_list),
                     'distance': round(dist, 2),
                     'time': round(float(info.get('time', 0)), 2),
-                    'weight': round(sum(customer_weights.get(n, 0) for n in nodes), 2),
+                    'weight': weight,
+                    'capacity': round(capacity, 2) if capacity is not None else None,
+                    'weight_exceeded': capacity is not None and weight > capacity,
                 })
 
             item['routes'] = route_rows
             item['total_distance'] = round(total_dist, 2)
+            item['weight_violated'] = exp.weight_violated
             chart_labels.append(exp.algorithm)
             chart_values.append(round(total_dist, 2))
 
@@ -212,6 +233,7 @@ def dashboard(request, batch_id):
         'algo_items': algo_items,
         'chart_labels': json.dumps(chart_labels),
         'chart_values': json.dumps(chart_values),
+        'vehicle_names_json': json.dumps(vehicle_name_map),
         'days_remaining': days_remaining,
         'share_token': str(batch.share_token) if batch.share_token else '',
     })

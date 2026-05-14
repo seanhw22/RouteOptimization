@@ -169,6 +169,24 @@ def make_progress_callback(experiment_id: int, every_n: int = 1):
     return _callback
 
 
+def _check_weight_violations(routes, vehicle_capacity, customer_orders, item_weights):
+    """Return list of (vehicle_id, total_weight, capacity) tuples where weight exceeds capacity."""
+    violations = []
+    if not (vehicle_capacity and customer_orders and item_weights):
+        return violations
+    for vehicle_id, route_info in routes.items():
+        nodes = route_info.get('nodes') or []
+        capacity = float(vehicle_capacity.get(vehicle_id, float('inf')))
+        total_weight = sum(
+            sum(float(item_weights.get(item, 0)) * qty
+                for item, qty in customer_orders.get(customer, {}).items())
+            for customer in nodes
+        )
+        if total_weight > capacity:
+            violations.append((vehicle_id, total_weight, capacity))
+    return violations
+
+
 def finalize_experiment(
     experiment_id: int,
     solution: dict,
@@ -176,6 +194,9 @@ def finalize_experiment(
     depot_for_vehicle: dict,
     distance_lookup=None,
     time_lookup=None,
+    vehicle_capacity=None,
+    customer_orders=None,
+    item_weights=None,
 ) -> None:
     """Persist the final routes and metrics for an experiment, then mark complete."""
     from src.experiment_tracker import ExperimentTracker
@@ -199,12 +220,35 @@ def finalize_experiment(
     if best_obj is None:
         best_obj = solution.get('objective')
 
+    no_solution = status in ('infeasible', 'unbounded', 'timeout', 'unknown')
+    if no_solution:
+        if status == 'infeasible':
+            log_line = 'MILP is infeasible — no solution satisfies all constraints for this dataset'
+        elif status == 'timeout':
+            log_line = 'MILP timed out without finding a feasible solution'
+        else:
+            log_line = f'Solver finished with status={status} (no solution found)'
+        exp_status = 'failed'
+        weight_violated = False
+    else:
+        violations = _check_weight_violations(routes, vehicle_capacity, customer_orders, item_weights)
+        weight_violated = bool(violations)
+        if weight_violated:
+            violation_detail = ', '.join(
+                f'{v} ({w:.1f} kg / {c:.1f} kg capacity)' for v, w, c in violations
+            )
+            log_line = f'Solver finished with status={status} — WARNING: weight exceeded on: {violation_detail}'
+        else:
+            log_line = f'Solver finished with status={status}'
+        exp_status = 'completed'
+
     tracker.update_progress(
         experiment_id=experiment_id,
-        status='completed',
+        status=exp_status,
         progress_pct=100,
         best_objective=best_obj,
-        log_line=f'Solver finished with status={status}',
+        log_line=log_line,
+        weight_violated=weight_violated,
     )
 
 

@@ -62,6 +62,11 @@ def validate_frames(frames: Dict[str, pd.DataFrame]) -> None:
             raise DatasetValidationError(
                 f'{entity}.csv is missing required column(s): {", ".join(sorted(missing))}'
             )
+        for col in required:
+            if df[col].isna().any():
+                raise DatasetValidationError(
+                    f'{entity}.csv has missing (empty) value(s) in required column "{col}".'
+                )
 
     for entity, id_col in (
         ('depots', 'depot_id'),
@@ -134,17 +139,24 @@ def save_dataset(
 
     depot_rows = []
     node_rows = []
+    has_depot_name = 'name' in frames['depots'].columns
     for _, row in frames['depots'].iterrows():
         node_id = _prefixed(ds_id, row['depot_id'])
         node_rows.append(Node(node_id=node_id, dataset=dataset, x=float(row['x']), y=float(row['y'])))
     Node.objects.bulk_create(node_rows)
     for _, row in frames['depots'].iterrows():
         depot_id = _prefixed(ds_id, row['depot_id'])
-        depot_rows.append(Depot(depot_id=depot_id, node_id=depot_id, dataset=dataset))
+        depot_rows.append(Depot(
+            depot_id=depot_id,
+            node_id=depot_id,
+            dataset=dataset,
+            name=str(row['name']) if has_depot_name and pd.notna(row['name']) else '',
+        ))
     Depot.objects.bulk_create(depot_rows)
 
     customer_node_rows = []
     customer_rows = []
+    has_customer_name = 'name' in frames['customers'].columns
     for _, row in frames['customers'].iterrows():
         node_id = _prefixed(ds_id, row['customer_id'])
         customer_node_rows.append(Node(node_id=node_id, dataset=dataset, x=float(row['x']), y=float(row['y'])))
@@ -152,16 +164,22 @@ def save_dataset(
     for _, row in frames['customers'].iterrows():
         cid = _prefixed(ds_id, row['customer_id'])
         customer_rows.append(Customer(
-            customer_id=cid, node_id=cid, dataset=dataset, deadline_hours=int(row['deadline_hours'])
+            customer_id=cid,
+            node_id=cid,
+            dataset=dataset,
+            name=str(row['name']) if has_customer_name and pd.notna(row['name']) else '',
+            deadline_hours=int(row['deadline_hours']),
         ))
     Customer.objects.bulk_create(customer_rows)
 
+    has_vehicle_name = 'name' in frames['vehicles'].columns
     vehicle_rows = []
     for _, row in frames['vehicles'].iterrows():
         vehicle_rows.append(Vehicle(
             vehicle_id=_prefixed(ds_id, row['vehicle_id']),
             depot_id=_prefixed(ds_id, row['depot_id']),
             dataset=dataset,
+            name=str(row['name']) if has_vehicle_name and pd.notna(row['name']) else '',
             vehicle_type=str(row['vehicle_type']),
             capacity_kg=float(row['capacity_kg']),
             max_operational_hrs=float(row['max_operational_hrs']),
@@ -169,11 +187,13 @@ def save_dataset(
         ))
     Vehicle.objects.bulk_create(vehicle_rows)
 
+    has_item_name = 'name' in frames['items'].columns
     item_rows = []
     for _, row in frames['items'].iterrows():
         item_rows.append(Item(
             item_id=_prefixed(ds_id, row['item_id']),
             dataset=dataset,
+            name=str(row['name']) if has_item_name and pd.notna(row['name']) else '',
             weight_kg=float(row['weight_kg']),
             expiry_hours=int(row['expiry_hours']),
         ))

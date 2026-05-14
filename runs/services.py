@@ -54,6 +54,7 @@ def create_experiments(*, batch: RunBatch, config: dict) -> list[Experiment]:
             generations=config.get('generations'),
             mutation_rate=config.get('mutation_rate'),
             crossover_rate=config.get('crossover_rate'),
+            no_improve_limit=config.get('no_improve_limit'),
             status='pending',
         ))
     if config.get('run_milp'):

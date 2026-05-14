@@ -42,7 +42,7 @@
                 data-tab="{{ item.algorithm }}"
                 aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
             {{ item.algorithm }}
-            <span class="badge {% if item.status == 'completed' %}ok{% elif item.status == 'running' %}info{% else %}muted{% endif %}">{{ item.status }}</span>
+            <span class="badge {% if item.status == 'completed' %}ok{% elif item.status == 'running' %}info{% else %}muted{% endif %}">{{ item.status }}{% if item.weight_violated %} - weight exceeded{% endif %}</span>
         </button>
         {% endfor %}
     </div>
@@ -70,16 +70,17 @@
         {% if item.routes %}
         <table class="data">
             <thead>
-                <tr><th>Vehicle</th><th>Stops</th><th>Distance (km)</th><th>Time (h)</th><th>Weight (kg)</th></tr>
+                <tr><th>Vehicle</th><th>Stops</th><th>Distance (km)</th><th>Time (h)</th><th>Weight (kg)</th><th>Capacity (kg)</th></tr>
             </thead>
             <tbody>
             {% for row in item.routes %}
-            <tr>
-                <td>{{ row.vehicle_id }}</td>
+            <tr{% if row.weight_exceeded %} class="row-warn"{% endif %}>
+                <td>{{ row.vehicle_name }}</td>
                 <td class="stops">{{ row.stops }}</td>
                 <td>{{ row.distance }}</td>
                 <td>{{ row.time }}</td>
-                <td>{{ row.weight }}</td>
+                <td{% if row.weight_exceeded %} class="cell-warn" title="Exceeds vehicle capacity"{% endif %}>{{ row.weight }}{% if row.weight_exceeded %} ⚠{% endif %}</td>
+                <td>{{ row.capacity|default:"—" }}</td>
             </tr>
             {% endfor %}
             </tbody>
@@ -109,6 +110,7 @@
 <script>
 // GeoJSON data per algorithm — | safe prevents Django from HTML-escaping the JSON
 const geojsonData = {};
+const vehicleNames = {{ vehicle_names_json | safe }};
 {% for item in algo_items %}{% if item.geojson_json != 'null' %}
 geojsonData["{{ item.algorithm }}"] = {{ item.geojson_json | safe }};
 {% endif %}{% endfor %}
@@ -168,7 +170,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
                     },
                     onEachFeature: (f, layer) => {
-                        if (f.properties.id) layer.bindPopup(f.properties.id);
+                        if (f.properties.id) layer.bindPopup(f.properties.name || f.properties.id);
                     }
                 }
             ).addTo(map);
@@ -257,7 +259,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             row.className = 'map-filter-row';
                             row.innerHTML = `<input type="checkbox" checked data-vid="${vid}">
                                 <span class="legend-swatch" style="background:${vehicleMeta[vid].col}"></span>
-                                Vehicle ${vid}`;
+                                ${vehicleNames[vid] || 'Vehicle ' + vid}`;
                             group.appendChild(row);
                         }
                         scroll.appendChild(group);
