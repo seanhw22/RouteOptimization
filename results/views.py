@@ -2,6 +2,7 @@
 
 import io
 import json
+import math
 
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
@@ -71,11 +72,63 @@ def _build_problem_data(dataset_id):
     }
 
 
-def _build_geojson(solution, coordinates, node_name_map=None):
+def _build_customer_orders(dataset_id):
+    """Return {node_id: {name, orders: [{item_name, quantity, weight_per_unit, total_weight}], total_weight}}."""
+    customers_qs = Customer.objects.filter(dataset_id=dataset_id).prefetch_related('orders__item')
+    result = {}
+    for c in customers_qs:
+        orders_list = []
+        for o in c.orders.all():
+            item_name = o.item.name if o.item.name else o.item.item_id
+            weight_per_unit = float(o.item.weight_kg)
+            total_weight = o.quantity * weight_per_unit
+            orders_list.append({
+                'item_name': item_name,
+                'quantity': o.quantity,
+                'weight_per_unit': weight_per_unit,
+                'total_weight': total_weight,
+            })
+        result[c.node_id] = {
+            'name': c.name or c.customer_id,
+            'orders': orders_list,
+            'total_weight': sum(x['total_weight'] for x in orders_list),
+        }
+    return result
+
+
+def _build_name_maps(dataset_id):
+    """Return {'vehicle_name_map': ..., 'node_name_map': ...} for a dataset."""
+    vehicles_qs = Vehicle.objects.filter(dataset_id=dataset_id)
+    vehicle_name_map = {v.vehicle_id: v.name or v.vehicle_id for v in vehicles_qs}
+
+    node_name_map = {}
+    for d in Depot.objects.filter(dataset_id=dataset_id):
+        if d.name:
+            node_name_map[d.node_id] = d.name
+    for c in Customer.objects.filter(dataset_id=dataset_id):
+        if c.name:
+            node_name_map[c.node_id] = c.name
+
+    return {'vehicle_name_map': vehicle_name_map, 'node_name_map': node_name_map}
+
+
+def _bearing(lat1, lon1, lat2, lon2):
+    """Compass bearing in degrees (0 = North, clockwise) from point 1 to point 2."""
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    x = math.sin(dlon) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+
+def _build_geojson(solution, coordinates, node_name_map=None, vehicle_name_map=None,
+                   include_arrows=False, include_legend=False):
     """Return a GeoJSON FeatureCollection dict built from solution + coordinates."""
     from geojson import Feature, FeatureCollection, LineString, Point
     if node_name_map is None:
         node_name_map = {}
+    if vehicle_name_map is None:
+        vehicle_name_map = {}
 
     routes = solution['routes']
     depot_for_vehicle = solution.get('depot_for_vehicle', {})
@@ -112,10 +165,13 @@ def _build_geojson(solution, coordinates, node_name_map=None):
             }
         ))
 
+    legend_routes = []
+
     for i, (vehicle_id, info) in enumerate(routes.items()):
         nodes = info.get('nodes', [])
         depot = depot_for_vehicle.get(vehicle_id)
         color = route_colors[i % len(route_colors)]
+        v_label = vehicle_name_map.get(vehicle_id, vehicle_id)
         chain = ([depot] + nodes + [depot]) if depot else nodes
         coords = []
         for nid in chain:
@@ -126,8 +182,8 @@ def _build_geojson(solution, coordinates, node_name_map=None):
             features.append(Feature(
                 geometry=LineString(coords),
                 properties={
-                    'vehicle_id': vehicle_id,
-                    'depot_id': depot or '',
+                    'vehicle_id': v_label,
+                    'depot_id': node_name_map.get(depot, depot) if depot else '',
                     'type': 'route',
                     'distance_km': round(info.get('distance', 0), 2),
                     'time_hours': round(info.get('time', 0), 2),
@@ -137,7 +193,56 @@ def _build_geojson(solution, coordinates, node_name_map=None):
                 }
             ))
 
-    return dict(FeatureCollection(features))
+            if include_arrows:
+                for j in range(len(chain) - 1):
+                    nid1, nid2 = chain[j], chain[j + 1]
+                    if nid1 in coordinates and nid2 in coordinates:
+                        lat1, lon1 = coordinates[nid1]
+                        lat2, lon2 = coordinates[nid2]
+                        mid_lat = (lat1 + lat2) / 2
+                        mid_lon = (lon1 + lon2) / 2
+                        brng = _bearing(lat1, lon1, lat2, lon2)
+                        from_label = node_name_map.get(nid1, nid1)
+                        to_label = node_name_map.get(nid2, nid2)
+                        features.append(Feature(
+                            geometry=Point((mid_lon, mid_lat)),
+                            properties={
+                                'type': 'direction',
+                                'vehicle': v_label,
+                                'from': from_label,
+                                'to': to_label,
+                                'stop_sequence': j + 1,
+                                'bearing': round(brng, 1),
+                                'marker-color': color,
+                                'marker-size': 'small',
+                                'marker-symbol': 'triangle',
+                                'title': f'Stop {j + 1}: {from_label} → {to_label}',
+                            }
+                        ))
+
+        if include_legend:
+            depot_label = node_name_map.get(depot, depot) if depot else ''
+            legend_routes.append({
+                'type': 'route',
+                'color': color,
+                'label': v_label,
+                'depot': depot_label,
+                'stops': len(nodes),
+                'distance_km': round(info.get('distance', 0), 2),
+            })
+
+    result = dict(FeatureCollection(features))
+
+    if include_legend:
+        result['legend'] = [
+            {'type': 'depot', 'color': '#2C3E50', 'marker-size': 'large', 'label': 'Depot'},
+            {'type': 'customer', 'color': '#27AE60', 'marker-size': 'medium', 'label': 'Customer'},
+            {'type': 'direction', 'color': '#888888', 'marker-size': 'small',
+             'marker-symbol': 'triangle', 'label': 'Direction arrow (bearing = compass degrees)'},
+            *legend_routes,
+        ]
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -246,8 +351,9 @@ def download_csv(request, batch_id, exp_id):
         return HttpResponse('Experiment not completed', status=400)
 
     solution = _build_solution(exp_id, batch.dataset_id)
+    name_maps = _build_name_maps(batch.dataset_id)
     buf = io.StringIO()
-    MDVRPExporter().export_csv(solution, buf)
+    MDVRPExporter().export_csv(solution, buf, name_maps=name_maps)
     buf.seek(0)
     response = HttpResponse(buf.read(), content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="routes_{exp.algorithm}.csv"'
@@ -262,8 +368,11 @@ def download_pdf(request, batch_id, exp_id):
 
     solution = _build_solution(exp_id, batch.dataset_id)
     problem_data = _build_problem_data(batch.dataset_id)
+    name_maps = _build_name_maps(batch.dataset_id)
+    customer_orders = _build_customer_orders(batch.dataset_id)
     buf = io.BytesIO()
-    MDVRPExporter().export_pdf(solution, problem_data, buf, algorithm_name=exp.algorithm)
+    MDVRPExporter().export_pdf(solution, problem_data, buf, algorithm_name=exp.algorithm,
+                               name_maps=name_maps, customer_orders=customer_orders)
     buf.seek(0)
     response = HttpResponse(buf.read(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="report_{exp.algorithm}.pdf"'
@@ -278,7 +387,14 @@ def download_geojson(request, batch_id, exp_id):
 
     solution = _build_solution(exp_id, batch.dataset_id)
     coordinates = _build_coordinates(batch.dataset_id)
-    geojson_dict = _build_geojson(solution, coordinates)
+    name_maps = _build_name_maps(batch.dataset_id)
+    geojson_dict = _build_geojson(
+        solution, coordinates,
+        node_name_map=name_maps['node_name_map'],
+        vehicle_name_map=name_maps['vehicle_name_map'],
+        include_arrows=True,
+        include_legend=True,
+    )
     response = HttpResponse(
         json.dumps(geojson_dict, indent=2),
         content_type='application/geo+json',

@@ -33,6 +33,20 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() == 'true'
 
 ALLOWED_HOSTS = ['*'] if DEBUG else os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
 
+# Trust X-Forwarded-Proto from reverse proxies (Cloudflare tunnel, nginx, etc.)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# CSRF trusted origins — required when accessed via Cloudflare tunnel or any non-localhost origin.
+# Set CLOUDFLARE_URL=https://xxxx.trycloudflare.com in .env (no trailing slash).
+_csrf_origins = ['http://localhost:8000', 'http://127.0.0.1:8000']
+_cloudflare_url = os.environ.get('CLOUDFLARE_URL', '').strip().rstrip('/')
+if _cloudflare_url:
+    _csrf_origins.append(_cloudflare_url)
+_extra_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+if _extra_origins:
+    _csrf_origins.extend(o.strip().rstrip('/') for o in _extra_origins.split(',') if o.strip())
+CSRF_TRUSTED_ORIGINS = _csrf_origins
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',

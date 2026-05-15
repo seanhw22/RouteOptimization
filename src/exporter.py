@@ -2,11 +2,12 @@
 Export MDVRP solutions to various formats (CSV, PDF, GeoJSON)
 """
 
+import io
 import pandas as pd
 import json
 from typing import Dict, List, Tuple, Any
 from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.units import inch
@@ -22,13 +23,114 @@ class MDVRPExporter:
         self.solution = None
         self.problem_data = None
 
-    def export_csv(self, solution: Dict, output_path: str) -> None:
+    def _generate_route_map_image(self, solution: Dict, coordinates: Dict,
+                                   name_maps: Dict = None):
+        """Render a route map with matplotlib and return a BytesIO PNG buffer, or None."""
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            import matplotlib.patches as mpatches
+        except ImportError:
+            return None
+
+        if not coordinates:
+            return None
+
+        node_name_map = (name_maps or {}).get('node_name_map', {})
+        vehicle_name_map = (name_maps or {}).get('vehicle_name_map', {})
+        routes = solution.get('routes', {})
+        depot_for_vehicle = solution.get('depot_for_vehicle', {})
+
+        route_colors = [
+            '#E63946', '#F4A261', '#2A9D8F', '#9B5DE5', '#FFB703',
+            '#3A86FF', '#F72585', '#06D6A0', '#FB5607', '#8AC926',
+        ]
+
+        fig, ax = plt.subplots(figsize=(10, 7))
+        legend_handles = []
+
+        for i, (vehicle_id, route_info) in enumerate(routes.items()):
+            if not isinstance(route_info, dict):
+                continue
+            nodes = route_info.get('nodes', [])
+            depot = depot_for_vehicle.get(vehicle_id)
+            chain = ([depot] + nodes + [depot]) if depot else nodes
+            color = route_colors[i % len(route_colors)]
+            v_label = vehicle_name_map.get(vehicle_id, vehicle_id)
+
+            xs, ys = [], []
+            for nid in chain:
+                if nid in coordinates:
+                    lat, lon = coordinates[nid]
+                    xs.append(lon)
+                    ys.append(lat)
+
+            if len(xs) > 1:
+                ax.plot(xs, ys, '-', color=color, linewidth=2, alpha=0.75, zorder=2)
+                for j in range(len(xs) - 1):
+                    mx = (xs[j] + xs[j + 1]) / 2
+                    my = (ys[j] + ys[j + 1]) / 2
+                    dx = xs[j + 1] - xs[j]
+                    dy = ys[j + 1] - ys[j]
+                    length = (dx ** 2 + dy ** 2) ** 0.5
+                    if length > 0:
+                        scale = length * 0.15
+                        ax.annotate('',
+                                    xy=(mx + dx / length * scale, my + dy / length * scale),
+                                    xytext=(mx - dx / length * scale, my - dy / length * scale),
+                                    arrowprops=dict(arrowstyle='->', color=color, lw=1.5),
+                                    zorder=3)
+
+            legend_handles.append(mpatches.Patch(color=color, label=v_label))
+
+        # Customer nodes
+        for node_id, (lat, lon) in coordinates.items():
+            raw = node_id.split('_', 1)[-1] if '_' in node_id else node_id
+            if not raw.upper().startswith('D'):
+                ax.scatter(lon, lat, c='#27AE60', s=55, zorder=4,
+                           edgecolors='white', linewidths=0.7)
+                label = node_name_map.get(node_id, node_id)
+                ax.annotate(label, (lon, lat), textcoords='offset points',
+                            xytext=(3, 3), fontsize=6, color='#333333', zorder=5)
+
+        # Depot nodes on top
+        for node_id, (lat, lon) in coordinates.items():
+            raw = node_id.split('_', 1)[-1] if '_' in node_id else node_id
+            if raw.upper().startswith('D'):
+                ax.scatter(lon, lat, c='#2C3E50', s=180, zorder=6,
+                           marker='*', edgecolors='white', linewidths=0.8)
+                label = node_name_map.get(node_id, node_id)
+                ax.annotate(label, (lon, lat), textcoords='offset points',
+                            xytext=(5, 5), fontsize=8, fontweight='bold',
+                            color='#2C3E50', zorder=7)
+
+        all_handles = ([mpatches.Patch(color='#2C3E50', label='Depot'),
+                        mpatches.Patch(color='#27AE60', label='Customer')]
+                       + legend_handles)
+        ax.legend(handles=all_handles, loc='upper right', fontsize=7,
+                  framealpha=0.9, borderpad=0.8)
+        ax.set_xlabel('Longitude', fontsize=9)
+        ax.set_ylabel('Latitude', fontsize=9)
+        ax.set_title('Route Map', fontsize=13, fontweight='bold', pad=12)
+        ax.grid(True, alpha=0.25, linestyle='--')
+        ax.tick_params(labelsize=7)
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        buf.seek(0)
+        return buf
+
+    def export_csv(self, solution: Dict, output_path: str, name_maps: Dict = None) -> None:
         """
         Export solution to CSV file.
 
         Args:
             solution: Solution dict with routes and metadata
             output_path: Path to output CSV file
+            name_maps: Optional dict with 'vehicle_name_map' and 'node_name_map'
 
         Raises:
             ValueError: If solution format is invalid
@@ -36,6 +138,9 @@ class MDVRPExporter:
         """
         if 'routes' not in solution:
             raise ValueError("Solution must contain 'routes' key")
+
+        vehicle_name_map = (name_maps or {}).get('vehicle_name_map', {})
+        node_name_map = (name_maps or {}).get('node_name_map', {})
 
         routes = solution['routes']
         depot_for_vehicle = solution.get('depot_for_vehicle', {})
@@ -54,7 +159,7 @@ class MDVRPExporter:
                     full_route = [depot] + nodes + [depot]
                 else:
                     full_route = [depot, depot]  # Empty route
-                route_str = ' -> '.join(map(str, full_route))
+                route_str = ' -> '.join(node_name_map.get(str(n), str(n)) for n in full_route)
                 distance = route_info.get('distance', 0)
                 time_hours = route_info.get('time', 0)
                 load_kg = route_info.get('load', 0)
@@ -66,14 +171,14 @@ class MDVRPExporter:
                     full_route = [depot] + route_info + [depot]
                 else:
                     full_route = [depot, depot]
-                route_str = ' -> '.join(map(str, full_route))
+                route_str = ' -> '.join(node_name_map.get(str(n), str(n)) for n in full_route)
                 distance = 0
                 time_hours = 0
                 load_kg = 0
                 speed_kmh = vehicle_speed.get(vehicle_id, 0)
 
             rows.append({
-                'vehicle_id': vehicle_id,
+                'vehicle': vehicle_name_map.get(vehicle_id, vehicle_id),
                 'route': route_str,
                 'distance_km': round(distance, 2),
                 'time_hours': round(time_hours, 2),
@@ -86,7 +191,8 @@ class MDVRPExporter:
         df.to_csv(output_path, index=False)
 
     def export_pdf(self, solution: Dict, problem_data: Dict, output_path: str,
-                   algorithm_name: str = None, algorithm_params: Dict = None) -> None:
+                   algorithm_name: str = None, algorithm_params: Dict = None,
+                   name_maps: Dict = None, customer_orders: Dict = None) -> None:
         """
         Export solution report to PDF.
 
@@ -96,6 +202,7 @@ class MDVRPExporter:
             output_path: Path to output PDF file
             algorithm_name: Name of the algorithm used (e.g., 'Greedy Heuristic', 'Hybrid GA', 'MILP')
             algorithm_params: Algorithm-specific parameters (e.g., population_size, generations, time_limit)
+            name_maps: Optional dict with 'vehicle_name_map' and 'node_name_map'
 
         Raises:
             ValueError: If solution format is invalid
@@ -103,6 +210,9 @@ class MDVRPExporter:
         """
         if 'routes' not in solution:
             raise ValueError("Solution must contain 'routes' key")
+
+        vehicle_name_map = (name_maps or {}).get('vehicle_name_map', {})
+        node_name_map = (name_maps or {}).get('node_name_map', {})
 
         # Create PDF document
         doc = SimpleDocTemplate(output_path, pagesize=A4,
@@ -197,7 +307,7 @@ class MDVRPExporter:
         # Add vehicle capacity if available
         if vehicle_capacity:
             if isinstance(vehicle_capacity, dict):
-                capacities = ', '.join([f"{k}: {v} kg" for k, v in vehicle_capacity.items()])
+                capacities = ', '.join([f"{vehicle_name_map.get(k, k)}: {v} kg" for k, v in vehicle_capacity.items()])
             else:
                 capacities = f"{vehicle_capacity} kg"
             specs_data.append(['Vehicle Capacity', Paragraph(capacities, cell_style_10)])
@@ -205,7 +315,7 @@ class MDVRPExporter:
         # Add vehicle speed if available
         if vehicle_speed:
             if isinstance(vehicle_speed, dict):
-                speeds = ', '.join([f"{k}: {v} km/h" for k, v in vehicle_speed.items()])
+                speeds = ', '.join([f"{vehicle_name_map.get(k, k)}: {v} km/h" for k, v in vehicle_speed.items()])
             else:
                 speeds = f"{vehicle_speed} km/h"
             specs_data.append(['Vehicle Speed', Paragraph(speeds, cell_style_10)])
@@ -213,7 +323,7 @@ class MDVRPExporter:
         # Add max time if available
         if max_time:
             if isinstance(max_time, dict):
-                times = ', '.join([f"{k}: {v} h" for k, v in max_time.items() if v])
+                times = ', '.join([f"{vehicle_name_map.get(k, k)}: {v} h" for k, v in max_time.items() if v])
             elif max_time:
                 times = f"{max_time} h"
             else:
@@ -309,6 +419,15 @@ class MDVRPExporter:
         story.append(stats_table)
         story.append(Spacer(1, 0.2 * inch))
 
+        # Route Map
+        coordinates = problem_data.get('coordinates', {})
+        map_buf = self._generate_route_map_image(solution, coordinates, name_maps=name_maps)
+        if map_buf is not None:
+            story.append(Paragraph("Route Map", heading_style))
+            img = Image(map_buf, width=6.5 * inch, height=4.5 * inch)
+            story.append(img)
+            story.append(Spacer(1, 0.2 * inch))
+
         # Routes table
         story.append(Paragraph("Vehicle Routes", heading_style))
         story.append(Spacer(1, 0.1 * inch))
@@ -330,7 +449,7 @@ class MDVRPExporter:
                     full_route = [depot] + nodes + [depot]
                 else:
                     full_route = [depot, depot]  # Empty route
-                route_str = ' -> '.join(map(str, full_route))
+                route_str = ' -> '.join(node_name_map.get(str(n), str(n)) for n in full_route)
                 distance = route_info.get('distance', 0)
                 time_hours = route_info.get('time', 0)
                 load_kg = route_info.get('load', 0)
@@ -342,14 +461,14 @@ class MDVRPExporter:
                     full_route = [depot] + nodes + [depot]
                 else:
                     full_route = [depot, depot]
-                route_str = ' -> '.join(map(str, full_route))
+                route_str = ' -> '.join(node_name_map.get(str(n), str(n)) for n in full_route)
                 distance = 0
                 time_hours = 0
                 load_kg = 0
                 speed_kmh = vehicle_speed.get(vehicle_id, 0)
 
             table_data.append([
-                vehicle_id,
+                vehicle_name_map.get(vehicle_id, vehicle_id),
                 Paragraph(route_str, cell_style_8),
                 f"{distance:.2f}",
                 f"{time_hours:.2f}",
@@ -375,6 +494,99 @@ class MDVRPExporter:
         ]))
 
         story.append(table)
+
+        # Detailed Route Orders section
+        if customer_orders:
+            story.append(PageBreak())
+            story.append(Paragraph("Detailed Route Orders", heading_style))
+
+            for vehicle_id, route_info in routes.items():
+                if isinstance(route_info, dict):
+                    nodes = route_info.get('nodes', [])
+                    distance = route_info.get('distance', 0)
+                    time_hours = route_info.get('time', 0)
+                else:
+                    nodes = route_info if route_info else []
+                    distance = 0
+                    time_hours = 0
+
+                depot = depot_for_vehicle.get(vehicle_id, '')
+                v_name = vehicle_name_map.get(vehicle_id, vehicle_id)
+
+                story.append(Spacer(1, 0.15 * inch))
+                story.append(Paragraph(f"Vehicle: {v_name}", subtitle_style))
+
+                if not nodes:
+                    story.append(Paragraph("No customers on this route.", styles['Normal']))
+                    continue
+
+                full_route = ([depot] + nodes + [depot]) if depot else nodes
+                route_str = ' → '.join(node_name_map.get(n, n) for n in full_route)
+                story.append(Paragraph(
+                    f"Route: {route_str} &nbsp;&nbsp;|&nbsp;&nbsp; "
+                    f"Distance: {distance:.2f} km &nbsp;&nbsp;|&nbsp;&nbsp; "
+                    f"Time: {time_hours:.2f} h",
+                    cell_style_8))
+                story.append(Spacer(1, 0.05 * inch))
+
+                col_widths = [0.45*inch, 1.6*inch, 2.1*inch, 0.5*inch, 0.85*inch, 0.9*inch]
+                tdata = [['Stop', 'Customer', 'Item', 'Qty', 'kg/unit', 'Total (kg)']]
+                tstyle = [
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                    ('ALIGN', (3, 0), (-1, -1), 'RIGHT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ]
+
+                row_idx = 1
+                route_total = 0.0
+
+                for stop_num, node_id in enumerate(nodes, 1):
+                    cust_name = node_name_map.get(node_id, node_id)
+                    cust_data = customer_orders.get(node_id)
+                    bg = colors.Color(0.96, 0.96, 1.0) if stop_num % 2 == 1 else colors.white
+
+                    if cust_data and cust_data.get('orders'):
+                        orders_list = cust_data['orders']
+                        first_row = row_idx
+
+                        for idx, order in enumerate(orders_list):
+                            tdata.append([
+                                str(stop_num) if idx == 0 else '',
+                                Paragraph(cust_name, cell_style_8) if idx == 0 else '',
+                                Paragraph(order['item_name'], cell_style_8),
+                                str(order['quantity']),
+                                f"{order['weight_per_unit']:.2f}",
+                                f"{order['total_weight']:.2f}",
+                            ])
+                            route_total += order['total_weight']
+                            row_idx += 1
+
+                        tstyle.append(('BACKGROUND', (0, first_row), (-1, row_idx - 1), bg))
+                        if len(orders_list) > 1:
+                            tstyle.append(('SPAN', (0, first_row), (0, row_idx - 1)))
+                            tstyle.append(('SPAN', (1, first_row), (1, row_idx - 1)))
+                    else:
+                        tdata.append([str(stop_num), Paragraph(cust_name, cell_style_8),
+                                      '—', '—', '—', '—'])
+                        tstyle.append(('BACKGROUND', (0, row_idx), (-1, row_idx), bg))
+                        row_idx += 1
+
+                # Total row
+                tdata.append(['', 'Route Total', '', '', '', f"{route_total:.2f}"])
+                tstyle.extend([
+                    ('BACKGROUND', (0, row_idx), (-1, row_idx), colors.Color(0.88, 0.88, 0.88)),
+                    ('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'),
+                    ('SPAN', (0, row_idx), (1, row_idx)),
+                ])
+
+                order_table = Table(tdata, colWidths=col_widths)
+                order_table.setStyle(TableStyle(tstyle))
+                story.append(order_table)
 
         # Build PDF
         doc.build(story)
