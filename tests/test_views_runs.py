@@ -22,6 +22,7 @@ def test_configure_post_creates_batch_and_redirects(auth_client, db_dataset):
         'population_size': 50,
         'mutation_rate': 0.1,
         'crossover_rate': 0.8,
+        'no_improve_limit': 20,
         'seed': 42,
         'milp_time_limit': 3600,
     }
