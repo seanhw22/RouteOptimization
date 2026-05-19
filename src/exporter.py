@@ -280,9 +280,11 @@ class MDVRPExporter:
         vehicle_speed = problem_data.get('vehicle_speed', {})
         max_time = problem_data.get('max_time', {})
 
-        # Calculate total customer demand - handle different data formats
+        # Calculate total customer demand
         total_demand = 0
-        if isinstance(customers, dict):
+        if customer_orders:
+            total_demand = sum(v.get('total_weight', 0) for v in customer_orders.values())
+        elif isinstance(customers, dict):
             for customer in customers.values():
                 if isinstance(customer, dict):
                     total_demand += customer.get('demand', 0)
