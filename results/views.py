@@ -332,6 +332,77 @@ def dashboard(request, batch_id):
         delta = batch.dataset.expires_at - timezone.now()
         days_remaining = max(0, delta.days)
 
+    comparison_text = ''
+    if len(chart_labels) == 1:
+        comparison_text = (
+            f'Only {chart_labels[0]} has completed so far, '
+            f'with a total distance of {chart_values[0]} km.'
+        )
+    elif len(chart_labels) >= 2:
+        pairs = list(zip(chart_labels, chart_values))
+        milp_pair = next(((l, v) for l, v in pairs if l.upper() == 'MILP'), None)
+        best_idx = chart_values.index(min(chart_values))
+        worst_idx = chart_values.index(max(chart_values))
+        best_algo = chart_labels[best_idx]
+        best_val = chart_values[best_idx]
+        worst_algo = chart_labels[worst_idx]
+        worst_val = chart_values[worst_idx]
+
+        if milp_pair:
+            milp_val = milp_pair[1]
+            heuristics = [(l, v) for l, v in pairs if l.upper() != 'MILP']
+            if not heuristics:
+                comparison_text = (
+                    f'MILP is the only completed algorithm, '
+                    f'with a total distance of {milp_val} km.'
+                )
+            elif best_val == worst_val:
+                comparison_text = (
+                    f'All algorithms produced the same total distance of {milp_val} km.'
+                )
+            elif best_algo.upper() != 'MILP':
+                # A heuristic beat MILP — it was likely stopped early
+                better = [(l, v) for l, v in heuristics if v < milp_val]
+                worse  = [(l, v) for l, v in heuristics if v > milp_val]
+                equal  = [(l, v) for l, v in heuristics if v == milp_val]
+                parts = []
+                for algo, val in sorted(better, key=lambda x: x[1]):
+                    gap = round((milp_val - val) / milp_val * 100, 1)
+                    parts.append(f'{algo} ({val} km, {gap}% better than MILP)')
+                for algo, val in sorted(equal, key=lambda x: x[1]):
+                    parts.append(f'{algo} matched MILP ({val} km)')
+                for algo, val in sorted(worse, key=lambda x: x[1]):
+                    gap = round((val - milp_val) / milp_val * 100, 1)
+                    parts.append(f'{algo} ({val} km, {gap}% above MILP)')
+                comparison_text = (
+                    f'MILP returned {milp_val} km but was outperformed, '
+                    f'likely due to an early time-limit stop. '
+                    + '; '.join(parts) + '.'
+                )
+            else:
+                # MILP is best — treat as optimal reference
+                parts = []
+                for algo, val in sorted(heuristics, key=lambda x: x[1]):
+                    if val == milp_val:
+                        parts.append(f'{algo} matched the MILP optimum ({val} km)')
+                    else:
+                        gap = round((val - milp_val) / milp_val * 100, 1)
+                        parts.append(f'{algo} was {gap}% above ({val} km)')
+                comparison_text = (
+                    f'MILP found the optimal solution at {milp_val} km. '
+                    + '; '.join(parts) + '.'
+                )
+        elif best_val == worst_val:
+            comparison_text = (
+                f'All algorithms produced the same total distance of {best_val} km.'
+            )
+        else:
+            pct = round((worst_val - best_val) / worst_val * 100, 1)
+            comparison_text = (
+                f'{best_algo} achieved the shortest total distance ({best_val} km), '
+                f'{pct}% less than {worst_algo} ({worst_val} km).'
+            )
+
     return render(request, 'results/dashboard.html', {
         'batch': batch,
         'experiments': experiments,
@@ -341,6 +412,7 @@ def dashboard(request, batch_id):
         'vehicle_names_json': json.dumps(vehicle_name_map),
         'days_remaining': days_remaining,
         'share_token': str(batch.share_token) if batch.share_token else '',
+        'comparison_text': comparison_text,
     })
 
 

@@ -38,9 +38,12 @@ reportlab>=4.0.0          # PDF document generation
 # Used for: Exporting routes as GeoJSON for mapping
 geojson>=3.1.0            # GeoJSON format for geographic data export
 
-# Matplotlib - Plotting (optional, for future visualization)
-# Used for: Potential future visualization features
-matplotlib>=3.8.0         # Plotting library (optional)
+# Matplotlib - Plotting (fallback map rendering for PDF export)
+matplotlib>=3.8.0         # Fallback route map when staticmap unavailable
+
+# staticmap - Render real map tiles for PDF export
+# Used for: Embedding CartoDB Voyager tile maps in PDF reports
+staticmap>=0.5.0          # Tile-based static map rendering (requires Pillow)
 
 # Database Dependencies
 # ====================

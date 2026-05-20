@@ -51,15 +51,25 @@
     <div class="tab-panel" id="tab-{{ item.algorithm }}" role="tabpanel"
          {% if not forloop.first %}style="display:none"{% endif %}>
         {% if item.status == 'completed' %}
-        <div class="row spread" style="margin-bottom:1rem">
-            <p class="muted">
-                Total distance: <strong>{{ item.total_distance }} km</strong>
-                {% if item.best_objective %} · Best objective: <strong>{{ item.best_objective|floatformat:2 }}</strong>{% endif %}
-            </p>
-            <div class="btn-group">
-                <a class="btn" href="{% url 'results:download_csv' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">CSV</a>
-                <a class="btn" href="{% url 'results:download_pdf' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">PDF</a>
-                <a class="btn" href="{% url 'results:download_geojson' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">GeoJSON</a>
+        <p class="muted" style="margin-bottom:1rem">
+            Total distance: <strong>{{ item.total_distance }} km</strong>
+            {% if item.best_objective %} · Best objective: <strong>{{ item.best_objective|floatformat:2 }}</strong>{% endif %}
+        </p>
+        <div style="margin-bottom:1.5rem">
+            <p class="muted" style="margin-bottom:0.6rem;font-size:0.85rem">Export results:</p>
+            <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-start">
+                <div style="display:flex;flex-direction:column;gap:0.3rem;max-width:210px">
+                    <a class="btn" href="{% url 'results:download_pdf' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">PDF <span class="badge ok">Recommended</span></a>
+                    <span class="muted" style="font-size:0.8rem">Formatted report with route map, statistics, and summary — best for sharing or printing.</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:0.3rem;max-width:190px">
+                    <a class="btn" href="{% url 'results:download_csv' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">CSV</a>
+                    <span class="muted" style="font-size:0.8rem">Spreadsheet data for further analysis in Excel or similar tools.</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:0.3rem;max-width:200px">
+                    <a class="btn" href="{% url 'results:download_geojson' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">GeoJSON</a>
+                    <span class="muted" style="font-size:0.8rem">Geographic route data for GIS tools like QGIS or mapping APIs.</span>
+                </div>
             </div>
         </div>
 
@@ -100,6 +110,9 @@
     <div style="max-width:600px">
         <canvas id="comparison-chart"></canvas>
     </div>
+    {% if comparison_text %}
+    <p class="muted" style="margin-top:0.75rem">{{ comparison_text }}</p>
+    {% endif %}
     {% else %}
     <p class="muted">No completed experiments to compare yet.</p>
     {% endif %}
@@ -344,7 +357,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 labels: {{ chart_labels | safe }},
                 datasets: [{
                     label: 'Total Distance (km)',
-                    data: {{ chart_values }},
+                    data: {{ chart_values | safe }},
                     backgroundColor: ['#4ECDC4', '#FF6B6B', '#45B7D1'],
                     borderRadius: 4,
                 }]

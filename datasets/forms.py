@@ -5,10 +5,16 @@ from django import forms
 
 class DatasetUploadForm(forms.Form):
     """Either an XLSX file with depots/customers/vehicles/items/orders sheets,
-    OR five CSV files. The view picks the right loader path based on what was
-    submitted."""
+    OR five CSV files. The upload_type field controls which path is active."""
+
+    UPLOAD_TYPE_CHOICES = [
+        ('', '— choose a format —'),
+        ('xlsx', 'Single XLSX workbook'),
+        ('csv', 'Five individual CSV files'),
+    ]
 
     name = forms.CharField(max_length=255, required=True, help_text='A label you can recognise later.')
+    upload_type = forms.ChoiceField(choices=UPLOAD_TYPE_CHOICES, required=True, label='Upload format')
 
     xlsx = forms.FileField(required=False, help_text='Single .xlsx with all five sheets.')
 
@@ -20,14 +26,21 @@ class DatasetUploadForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
-        has_xlsx = bool(cleaned.get('xlsx'))
-        csv_fields = ('depots_csv', 'customers_csv', 'vehicles_csv', 'items_csv', 'orders_csv')
-        csvs = [cleaned.get(f) for f in csv_fields]
-        has_all_csvs = all(csvs)
-        has_any_csv = any(csvs)
+        upload_type = cleaned.get('upload_type')
 
-        if has_xlsx and has_any_csv:
-            raise forms.ValidationError('Provide either an XLSX file OR the five CSVs, not both.')
-        if not has_xlsx and not has_all_csvs:
-            raise forms.ValidationError('Upload an XLSX file or all five CSV files (depots, customers, vehicles, items, orders).')
+        if upload_type == 'xlsx':
+            if not cleaned.get('xlsx'):
+                self.add_error('xlsx', 'Please upload an XLSX file.')
+        elif upload_type == 'csv':
+            missing = {
+                'depots_csv': 'depots',
+                'customers_csv': 'customers',
+                'vehicles_csv': 'vehicles',
+                'items_csv': 'items',
+                'orders_csv': 'orders',
+            }
+            for field, label in missing.items():
+                if not cleaned.get(field):
+                    self.add_error(field, f'Please upload the {label} CSV file.')
+
         return cleaned

@@ -1,11 +1,47 @@
 {% extends 'base.html' %}
 {% block title %}Upload dataset · RouteForge{% endblock %}
+{% block extra_head %}
+<style>
+.sample-datasets { margin-bottom: 1.5rem; }
+.sample-grid { display: flex; flex-wrap: wrap; gap: .5rem; }
+.sample-card {
+    display: flex; flex-direction: column; align-items: center;
+    padding: .6rem 1rem; border: 1px solid var(--border, #ddd);
+    border-radius: 6px; background: var(--surface, #fafafa);
+    cursor: pointer; font-family: inherit; gap: .15rem;
+    transition: border-color .15s, background .15s;
+}
+.sample-card:hover { border-color: var(--accent, #0070f3); background: var(--surface-hover, #f0f7ff); }
+.sample-size { font-size: 1.25rem; font-weight: 700; line-height: 1; }
+.sample-label { font-size: .7rem; color: var(--muted, #888); text-transform: uppercase; letter-spacing: .04em; }
+.sample-badge { font-size: .65rem; padding: .1rem .35rem; border-radius: 3px; margin-top: .2rem;
+    background: #e8f5e9; color: #2e7d32; font-weight: 600; }
+.sample-badge:not(.milp) { background: #f3f3f3; color: #888; }
+</style>
+{% endblock %}
 {% block content %}
 <section>
     <header>
         <h1>Upload dataset</h1>
         <p class="muted">Upload your logistics data as a single XLSX workbook or as individual CSV files.</p>
     </header>
+
+    <div class="sample-datasets">
+        <p class="muted" style="font-size:.875rem;margin:0 0 .75rem;font-weight:500">Quick-load a test dataset</p>
+        <div class="sample-grid">
+            {% for key, label, milp in sample_datasets %}
+            <form method="post" action="{% url 'datasets:load_sample' %}">
+                {% csrf_token %}
+                <input type="hidden" name="sample" value="{{ key }}">
+                <button type="submit" class="sample-card">
+                    <span class="sample-size">{{ key }}</span>
+                    <span class="sample-label">nodes</span>
+                    {% if milp %}<span class="sample-badge milp">MILP ok</span>{% else %}<span class="sample-badge">no MILP</span>{% endif %}
+                </button>
+            </form>
+            {% endfor %}
+        </div>
+    </div>
 
     <div class="schema-info">
         <p class="muted" style="font-size:.875rem;margin:0 0 .75rem;font-weight:500">Required column schema</p>
@@ -21,40 +57,145 @@
         </table>
     </div>
 
-    <form method="post" enctype="multipart/form-data">
+    {% if form.non_field_errors %}<div class="formerrors">{{ form.non_field_errors }}</div>{% endif %}
+
+    <form id="upload-form" method="post" enctype="multipart/form-data">
         {% csrf_token %}
-        {% if form.non_field_errors %}<div class="formerrors">{{ form.non_field_errors }}</div>{% endif %}
 
         <div class="field">
             <label for="id_name">Dataset name</label>
             {{ form.name }}{{ form.name.errors }}
         </div>
 
-        <div class="upload-options">
-            <div class="upload-option">
-                <h2>Option A — Single XLSX</h2>
-                <p class="muted">One workbook with five named sheets.</p>
-                <div class="field" style="margin-bottom:0">
-                    <label for="id_xlsx">XLSX file</label>
-                    {{ form.xlsx }}{{ form.xlsx.errors }}
-                </div>
-            </div>
+        <div class="field">
+            <label for="{{ form.upload_type.id_for_label }}">{{ form.upload_type.label }}</label>
+            {{ form.upload_type }}{{ form.upload_type.errors }}
+        </div>
 
-            <div class="option-or">or</div>
-
-            <div class="upload-option">
-                <h2>Option B — Five CSVs</h2>
-                <p class="muted">One CSV file per sheet.</p>
-                {% for f in form %}{% if f.name|slice:"-4:" == "_csv" %}
-                <div class="field">
-                    <label for="{{ f.id_for_label }}">{{ f.label }}</label>
-                    {{ f }}{{ f.errors }}
-                </div>
-                {% endif %}{% endfor %}
+        <div id="panel-xlsx" hidden>
+            <div class="field">
+                <label for="id_xlsx">XLSX file</label>
+                {{ form.xlsx }}{{ form.xlsx.errors }}
             </div>
+        </div>
+
+        <div id="panel-csv" hidden>
+            {% for f in form %}{% if f.name|slice:"-4:" == "_csv" %}
+            <div class="field">
+                <label for="{{ f.id_for_label }}">{{ f.label }}</label>
+                {{ f }}{{ f.errors }}
+            </div>
+            {% endif %}{% endfor %}
         </div>
 
         <button type="submit" class="primary">Upload &amp; preview</button>
     </form>
+
+    <script>
+    (function () {
+        var sel = document.getElementById('id_upload_type');
+        var panelXlsx = document.getElementById('panel-xlsx');
+        var panelCsv  = document.getElementById('panel-csv');
+        var xlsxInput = document.getElementById('id_xlsx');
+        var csvInputs = [
+            { el: document.getElementById('id_depots_csv'),    label: 'depots' },
+            { el: document.getElementById('id_customers_csv'), label: 'customers' },
+            { el: document.getElementById('id_vehicles_csv'),  label: 'vehicles' },
+            { el: document.getElementById('id_items_csv'),     label: 'items' },
+            { el: document.getElementById('id_orders_csv'),    label: 'orders' },
+        ];
+        var form = document.getElementById('upload-form');
+
+        function hasFile(inp) { return inp && inp.files && inp.files.length > 0; }
+
+        function clearErrors() {
+            document.querySelectorAll('.js-err').forEach(function (el) { el.remove(); });
+        }
+
+        function addFieldError(input, msg) {
+            var ul = document.createElement('ul');
+            ul.className = 'errorlist js-err';
+            var li = document.createElement('li');
+            li.textContent = msg;
+            ul.appendChild(li);
+            input.insertAdjacentElement('afterend', ul);
+        }
+
+        function addTopError(msg) {
+            var box = document.getElementById('js-top-err');
+            if (!box) {
+                box = document.createElement('div');
+                box.id = 'js-top-err';
+                box.className = 'formerrors js-err';
+                form.insertAdjacentElement('beforebegin', box);
+            }
+            var p = document.createElement('p');
+            p.style.margin = '0';
+            p.textContent = msg;
+            box.appendChild(p);
+        }
+
+        sel.addEventListener('change', function () {
+            panelXlsx.hidden = sel.value !== 'xlsx';
+            panelCsv.hidden  = sel.value !== 'csv';
+            clearErrors();
+        });
+
+        panelXlsx.hidden = sel.value !== 'xlsx';
+        panelCsv.hidden  = sel.value !== 'csv';
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            clearErrors();
+
+            // --- client-side: check files before touching the server ---
+            var type = sel.value;
+            var ok = true;
+
+            if (!type) {
+                addFieldError(sel, 'Please choose a format.');
+                ok = false;
+            } else if (type === 'xlsx') {
+                if (!hasFile(xlsxInput)) {
+                    addFieldError(xlsxInput, 'Please select an XLSX file.');
+                    ok = false;
+                }
+            } else if (type === 'csv') {
+                csvInputs.forEach(function (c) {
+                    if (!hasFile(c.el)) {
+                        addFieldError(c.el, 'Please select the ' + c.label + ' CSV file.');
+                        ok = false;
+                    }
+                });
+            }
+
+            if (!ok) return;
+
+            // --- all files present: submit via fetch so the page never reloads ---
+            fetch(window.location.pathname, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: new FormData(form),
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.ok) {
+                    window.location.href = data.redirect;
+                    return;
+                }
+                Object.keys(data.errors).forEach(function (field) {
+                    var msgs = data.errors[field].map(function (e) { return e.message; });
+                    if (field === '__all__') {
+                        msgs.forEach(addTopError);
+                    } else {
+                        var inp = document.getElementById('id_' + field);
+                        msgs.forEach(inp ? function (m) { addFieldError(inp, m); }
+                                        : addTopError);
+                    }
+                });
+            });
+        });
+    })();
+    </script>
 </section>
 {% endblock %}

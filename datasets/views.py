@@ -2,8 +2,11 @@
 
 import uuid
 
+from django.conf import settings
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.permissions import (
@@ -14,6 +17,15 @@ from accounts.permissions import (
 from .forms import DatasetUploadForm
 from .models import Dataset
 from .services import DatasetValidationError, parse_uploaded, save_dataset, validate_frames
+
+_SAMPLE_DATASETS = {
+    '5':   ('5nodes',   'Sample 5 nodes'),
+    '10':  ('10nodes',  'Sample 10 nodes'),
+    '15':  ('15nodes',  'Sample 15 nodes'),
+    '50':  ('50nodes',  'Sample 50 nodes'),
+    '100': ('100nodes', 'Sample 100 nodes'),
+    '200': ('200nodes', 'Sample 200 nodes'),
+}
 
 
 def _require_session(request):
@@ -29,6 +41,8 @@ def upload(request):
     if bounce:
         return bounce
 
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if request.method == 'POST':
         form = DatasetUploadForm(request.POST, request.FILES)
         if form.is_valid():
@@ -36,6 +50,11 @@ def upload(request):
                 frames = parse_uploaded(request.FILES)
                 validate_frames(frames)
             except DatasetValidationError as e:
+                if is_ajax:
+                    return JsonResponse(
+                        {'ok': False, 'errors': {'__all__': [{'message': str(e)}]}},
+                        status=422,
+                    )
                 form.add_error(None, str(e))
             else:
                 if not request.session.session_key:
@@ -53,11 +72,21 @@ def upload(request):
                     guest_ids.append(dataset.dataset_id)
                     request.session['guest_datasets'] = guest_ids
                 messages.success(request, f'Dataset "{dataset.name}" uploaded.')
+                url = reverse('datasets:detail', args=[dataset.dataset_id])
+                if is_ajax:
+                    return JsonResponse({'ok': True, 'redirect': url})
                 return redirect('datasets:detail', dataset_id=dataset.dataset_id)
+
+        if is_ajax:
+            return JsonResponse({'ok': False, 'errors': form.errors.get_json_data()}, status=422)
     else:
         form = DatasetUploadForm()
 
-    return render(request, 'datasets/upload.html', {'form': form})
+    sample_datasets = [
+        (key, label, int(key) <= 25)
+        for key, (_, label) in _SAMPLE_DATASETS.items()
+    ]
+    return render(request, 'datasets/upload.html', {'form': form, 'sample_datasets': sample_datasets})
 
 
 @require_http_methods(['GET'])
@@ -157,3 +186,44 @@ def delete_dataset(request, dataset_id):
             request.session['guest_datasets'] = guest_ids
     messages.success(request, f'Dataset "{name}" deleted.')
     return redirect('datasets:list')
+
+
+@require_POST
+def load_sample(request):
+    bounce = _require_session(request)
+    if bounce:
+        return bounce
+
+    key = request.POST.get('sample', '')
+    if key not in _SAMPLE_DATASETS:
+        messages.error(request, 'Unknown sample dataset.')
+        return redirect('datasets:upload')
+
+    label, display_name = _SAMPLE_DATASETS[key]
+    xlsx_path = settings.BASE_DIR / 'dataset_for_use' / f'data_{label}' / f'dataset_{label}.xlsx'
+
+    try:
+        with open(xlsx_path, 'rb') as f:
+            frames = parse_uploaded({'xlsx': f})
+        validate_frames(frames)
+    except (DatasetValidationError, OSError) as e:
+        messages.error(request, f'Could not load sample dataset: {e}')
+        return redirect('datasets:upload')
+
+    if not request.session.session_key:
+        request.session.create()
+    user = request.user if request.user.is_authenticated else None
+    dataset = save_dataset(
+        name=display_name,
+        user=user,
+        session_key=request.session.session_key or '',
+        is_guest=is_guest(request) and not request.user.is_authenticated,
+        frames=frames,
+    )
+    if not request.user.is_authenticated:
+        guest_ids = list(request.session.get('guest_datasets', []))
+        guest_ids.append(dataset.dataset_id)
+        request.session['guest_datasets'] = guest_ids
+
+    messages.success(request, f'Sample dataset "{dataset.name}" loaded.')
+    return redirect('datasets:detail', dataset_id=dataset.dataset_id)

@@ -25,16 +25,113 @@ class MDVRPExporter:
 
     def _generate_route_map_image(self, solution: Dict, coordinates: Dict,
                                    name_maps: Dict = None):
-        """Render a route map with matplotlib and return a BytesIO PNG buffer, or None."""
+        """Render a route map. Uses staticmap (real tiles) if available, else matplotlib."""
+        if not coordinates:
+            return None
+        try:
+            return self._render_tile_map(solution, coordinates, name_maps)
+        except Exception:
+            return self._render_matplotlib_map(solution, coordinates, name_maps)
+
+    def _render_tile_map(self, solution: Dict, coordinates: Dict,
+                         name_maps: Dict = None):
+        """Render route map on real CartoDB Voyager tiles using staticmap + PIL."""
+        from staticmap import StaticMap, CircleMarker, Line
+        from PIL import Image as PILImage, ImageDraw, ImageFont
+
+        vehicle_name_map = (name_maps or {}).get('vehicle_name_map', {})
+        routes = solution.get('routes', {})
+        depot_for_vehicle = solution.get('depot_for_vehicle', {})
+
+        route_colors = [
+            '#E63946', '#F4A261', '#2A9D8F', '#9B5DE5', '#FFB703',
+            '#3A86FF', '#F72585', '#06D6A0', '#FB5607', '#8AC926',
+        ]
+
+        tile_url = 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
+        m = StaticMap(1200, 840, url_template=tile_url, tile_request_timeout=10)
+
+        legend_items = []
+
+        for i, (vehicle_id, route_info) in enumerate(routes.items()):
+            if not isinstance(route_info, dict):
+                continue
+            nodes = route_info.get('nodes', [])
+            depot = depot_for_vehicle.get(vehicle_id)
+            chain = ([depot] + nodes + [depot]) if depot else nodes
+            color = route_colors[i % len(route_colors)]
+            v_label = vehicle_name_map.get(vehicle_id, vehicle_id)
+            legend_items.append((color, v_label))
+
+            coords = []
+            for nid in chain:
+                if nid in coordinates:
+                    # coordinates stores (n.y, n.x) = (lon, lat) — pass directly to staticmap
+                    coords.append(coordinates[nid])
+
+            if len(coords) > 1:
+                m.add_line(Line(coords, color, 3))
+
+        # Customer markers: white outline then green fill
+        for node_id, lonlat in coordinates.items():
+            raw = node_id.split('_', 1)[-1] if '_' in node_id else node_id
+            if not raw.upper().startswith('D'):
+                m.add_marker(CircleMarker(lonlat, 'white', 14))
+                m.add_marker(CircleMarker(lonlat, '#27AE60', 9))
+
+        # Depot markers: white outline then dark fill (drawn last = on top)
+        for node_id, lonlat in coordinates.items():
+            raw = node_id.split('_', 1)[-1] if '_' in node_id else node_id
+            if raw.upper().startswith('D'):
+                m.add_marker(CircleMarker(lonlat, 'white', 24))
+                m.add_marker(CircleMarker(lonlat, '#2C3E50', 16))
+
+        image = m.render()
+
+        # Legend overlay
+        all_legend = [('#2C3E50', 'Depot'), ('#27AE60', 'Customer')] + legend_items
+        image = image.convert('RGBA')
+        overlay = PILImage.new('RGBA', image.size, (255, 255, 255, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        try:
+            font = ImageFont.truetype('arial.ttf', 13)
+        except Exception:
+            font = ImageFont.load_default()
+
+        padding, item_h, swatch = 10, 22, 14
+        legend_w = 175
+        legend_h = padding * 2 + len(all_legend) * item_h
+        iw, ih = image.size
+        x0, y0 = iw - legend_w - 15, 15
+
+        draw.rectangle([x0, y0, x0 + legend_w, y0 + legend_h],
+                       fill=(255, 255, 255, 210), outline=(180, 180, 180, 255))
+
+        for idx, (hex_color, label) in enumerate(all_legend):
+            iy = y0 + padding + idx * item_h
+            r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+            sx = x0 + padding
+            draw.rectangle([sx, iy + 4, sx + swatch, iy + 4 + swatch],
+                           fill=(r, g, b, 255))
+            draw.text((sx + swatch + 6, iy + 4), label, fill=(50, 50, 50, 255), font=font)
+
+        image = PILImage.alpha_composite(image, overlay).convert('RGB')
+
+        buf = io.BytesIO()
+        image.save(buf, format='PNG')
+        buf.seek(0)
+        return buf
+
+    def _render_matplotlib_map(self, solution: Dict, coordinates: Dict,
+                                name_maps: Dict = None):
+        """Fallback: render route map with matplotlib (no tile background)."""
         try:
             import matplotlib
             matplotlib.use('Agg')
             import matplotlib.pyplot as plt
             import matplotlib.patches as mpatches
         except ImportError:
-            return None
-
-        if not coordinates:
             return None
 
         node_name_map = (name_maps or {}).get('node_name_map', {})
@@ -84,7 +181,6 @@ class MDVRPExporter:
 
             legend_handles.append(mpatches.Patch(color=color, label=v_label))
 
-        # Customer nodes
         for node_id, (lat, lon) in coordinates.items():
             raw = node_id.split('_', 1)[-1] if '_' in node_id else node_id
             if not raw.upper().startswith('D'):
@@ -94,7 +190,6 @@ class MDVRPExporter:
                 ax.annotate(label, (lon, lat), textcoords='offset points',
                             xytext=(3, 3), fontsize=6, color='#333333', zorder=5)
 
-        # Depot nodes on top
         for node_id, (lat, lon) in coordinates.items():
             raw = node_id.split('_', 1)[-1] if '_' in node_id else node_id
             if raw.upper().startswith('D'):
