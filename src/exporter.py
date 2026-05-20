@@ -454,7 +454,10 @@ class MDVRPExporter:
                 route_str = ' -> '.join(node_name_map.get(str(n), str(n)) for n in full_route)
                 distance = route_info.get('distance', 0)
                 time_hours = route_info.get('time', 0)
-                load_kg = route_info.get('load', 0)
+                load_kg = route_info.get('load') or (
+                    sum(customer_orders.get(n, {}).get('total_weight', 0) for n in nodes)
+                    if customer_orders else 0
+                )
                 speed_kmh = vehicle_speed.get(vehicle_id, 0)
             else:
                 nodes = route_info if route_info else []
@@ -466,7 +469,10 @@ class MDVRPExporter:
                 route_str = ' -> '.join(node_name_map.get(str(n), str(n)) for n in full_route)
                 distance = 0
                 time_hours = 0
-                load_kg = 0
+                load_kg = (
+                    sum(customer_orders.get(n, {}).get('total_weight', 0) for n in nodes)
+                    if customer_orders else 0
+                )
                 speed_kmh = vehicle_speed.get(vehicle_id, 0)
 
             table_data.append([
