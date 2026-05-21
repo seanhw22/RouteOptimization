@@ -1,0 +1,1035 @@
+l pelanggan dan tabel item, sedangkan rute terkait 
+
+dengan kendaraan dan eksperimen tertentu. 
+
+Basis data aplikasi diimplementasikan menggunakan Django ORM dengan 
+
+PostgreSQL sebagai basis data relasional. Selain tabel-tabel yang dirancang khusus 
+
+untuk  keperluan  MDVRP  (datasets,  nodes,  node_distances,  depots,  customers, 
+
+items, vehicles, orders, experiments, run_batches, routes, result_metrics), sistem 
+
+juga memanfaatkan tabel-tabel bawaan Django yang dikelola secara otomatis oleh 
+
+framework, yaitu: auth_user untuk menyimpan data akun pengguna beserta kata 
+
+sandi  yang  di-hash, django_session untuk  mengelola  sesi  login  baik  pengguna 
+
+terdaftar maupun pengguna tamu, dan beberapa tabel migrasi dan izin bawaan 
+
+lainnya (auth_permission, django_content_type, django_migrations). Tabel-tabel 
+
+bawaan Django ini tidak dirancang secara eksplisit oleh pengembang, melainkan 
+
+dibuat  dan  dikelola  secara  otomatis  oleh  Django  sehingga  tidak  dimasukkan  ke 
+
+dalam  Lampiran  Spesifikasi  Tabel.  Diagram  hubungan  antar  tabel  yang 
+
+menggambarkan skema logis dan hubungan antar entitas disajikan pada Lampiran 
+
+10, sementara rincian spesifikasi tiap tabel (nama kolom, tipe data, dan constraint) 
+
+disajikan pada Lampiran 11. 
+
+3.1.4.  Rancangan Antarmuka 
+
+Rancangan  antarmuka  aplikasi  dibagi  menjadi  beberapa  halaman  atau 
+
+menu yang merepresentasikan modul-modul utama. 
+
+1.  Dashboard 
+
+45 
+
+ 
+ 
+ 
+ 
+Halaman  utama  yang  menampilkan  ringkasan  eksperimen  terakhir, 
+
+statistik singkat, dan akses cepat ke fitur penting seperti unggah instance 
+
+atau jalankan algoritma. 
+
+2.  Instance Upload 
+
+Halaman  ini  memungkinkan  pengguna  mengunggah  dataset  pelanggan, 
+
+depot, kendaraan, item, dan pesanan. Sistem menampilkan pratinjau data, 
+
+memberikan  peringatan  jika  ada  duplikasi  atau  data  tidak  valid,  dan 
+
+mempersiapkan dataset untuk langkah preprocessing. 
+
+3.  Solver Configuration 
+
+Halaman  untuk  mengatur  parameter  (jumlah  generasi,  populasi,  tingkat 
+
+mutasi, dll.), dan memilih seed atau skenario eksperimen. 
+
+4.  Run Management dan Live Run Viewer 
+
+Halaman yang  menampilkan  progres eksekusi  solver, termasuk  indikator 
+
+waktu berjalan, log eksekusi, dan status per kendaraan. Pengguna dapat 
+
+menghentikan atau menjeda proses jika diperlukan. 
+
+5.  Results Page 
+
+Halaman  visualisasi  hasil  optimasi.  Menampilkan  peta  interaktif  rute 
+
+kendaraan,  statistik  per-rute  (jarak,  beban,  waktu  kedatangan),  grafik 
+
+perbandingan performa algoritma,  serta  indikator  pelanggaran  kapasitas 
+
+atau waktu. 
+
+6.  Export dan Reporting 
+
+46 
+
+ 
+Halaman ini  memungkinkan pengguna mengekspor hasil optimasi dalam 
+
+berbagai  format,  seperti  CSV,  PDF,  atau  GeoJSON,  untuk  keperluan 
+
+dokumentasi atau analisis lebih lanjut. 
+
+Contoh  visualisasi  untuk  masing-masing  halaman  antarmuka  dapat 
+
+merujuk pada Lampiran 12. 
+
+3.2. Pembuatan Sistem  
+
+Pembuatan sistem MDVRP berbasis web ini mengacu pada rancangan yang 
+
+telah 
+
+diuraikan 
+
+pada 
+
+Subbab 
+
+3.1, 
+
+dengan 
+
+menggunakan 
+
+framework Django berbasis Python sebagai fondasi utama. Sistem dikembangkan 
+
+secara bertahap sesuai pendekatan SDLC incremental, di mana setiap komponen 
+
+dibangun, diuji secara fungsional, kemudian diintegrasikan ke dalam keseluruhan 
+
+sistem. 
+
+3.2.1. Implementasi Basis Data 
+
+Sistem  dibangun  di  atas  ekosistem  Python  dengan Django sebagai  web 
+
+framework.  Pemilihan  Django  didasarkan  pada  kemampuannya  menyediakan 
+
+ORM  bawaan,  sistem  autentikasi,  manajemen  sesi,  serta  routing  URL  yang 
+
+terintegrasi,  sehingga  pengembang  dapat  berfokus  pada  logika  bisnis  aplikasi. 
+
+Basis  data  yang  digunakan  adalah PostgreSQL,  yang  menyediakan  dukungan 
+
+transaksi yang andal, konkurensi tinggi, dan kompatibilitas penuh dengan Django 
+
+ORM. 
+
+47 
+
+ 
+ 
+ 
+Pustaka-pustaka  pendukung  implementasi  algoritma  yang  telah  diperkenalkan 
+
+pada  Subbab  2.8  digunakan  kembali  dalam  sistem  ini  dengan  peran  spesifik 
+
+sebagai berikut: 
+
+1.  Gurobi (gurobipy) 
+
+digunakan 
+
+sebagai 
+
+solver  MILP 
+
+pada 
+
+modul algorithms/milp.py,  dengan  lisensi  akademis  yang  memungkinkan 
+
+penggunaan tanpa biaya. 
+
+2.  DEAP dimanfaatkan untuk implementasi operator seleksi, crossover (OX), 
+
+mutasi (swap), dan integrasi local search pada modul HGA. 
+
+3.  NumPy digunakan untuk membangun dan mengakses matriks jarak antar 
+
+node yang dikomputasi saat unggah dataset. 
+
+4.  Pandas digunakan untuk membaca dan memvalidasi file dataset masukan 
+
+dalam format XLSX dan CSV. 
+
+5.  SciPy digunakan dalam proses normalisasi koordinat node. 
+
+6.  tqdm menampilkan progress  bar pada  iterasi algoritma  dan meneruskan 
+
+log ke antarmuka live viewer. 
+
+3.2.2. Implementasi Manajemen Dataset 
+
+Modul  unggah  dataset  memungkinkan  pengguna  mengunggah  data 
+
+distribusi  dalam  dua  format:  file  XLSX  dengan  5  lembar  (Depots,  Customers, 
+
+Vehicles,  Items,  Orders),  atau  5  file  CSV  terpisah.  Validasi  dilakukan  terhadap 
+
+struktur kolom, tipe data, serta konsistensi referensi antar tabel (misalnya, setiap 
+
+kendaraan harus mereferensi depot yang valid). 
+
+48 
+
+ 
+ 
+ 
+Setelah  validasi  lolos,  sistem  memparsing  dan  menyimpan  data  ke  dalam 
+
+tabel-tabel  basis  data  menggunakan  Django  ORM.  Proses  pre-komputasi  jarak 
+
+antar node dilakukan satu kali saat unggah dan disimpan di tabel node_distances, 
+
+sehingga  seluruh  solver  dapat  mengakses  nilai  jarak  secara  efisien  tanpa 
+
+menghitung  ulang.  Potongan  kode 
+
+implementasi  parsing  dataset  dan 
+
+penyimpanan ke ORM dapat dilihat pada Gambar L3.14. 
+
+3.2.3 Implementasi Algoritma Greedy Cheapest Insertion 
+
+Algoritma  Greedy  Cheapest 
+
+Insertion  diimplementasikan  dalam 
+
+modul algorithms/greedy.py. Algoritma bekerja dengan membangun rute satu per 
+
+satu secara iteratif: pada setiap iterasi, pelanggan yang belum teralokasi dengan 
+
+biaya  penyisipan  terkecil  dipilih  dan  disisipkan  ke  posisi  optimal  dalam  rute 
+
+kendaraan  yang  tersedia.  Kapasitas  kendaraan  dan  batas  waktu  operasional 
+
+dievaluasi setiap kali sebelum suatu penyisipan diterima. Potongan kode lengkap 
+
+implementasi Greedy Cheapest Insertion disajikan pada Gambar L3.15. 
+
+3.2.4 Implementasi Algoritma Hybrid Genetic Algorithm 
+
+HGA  diimplementasikan  dalam  modul algorithms/mdvrp_hga.py dan 
+
+memanfaatkan  DEAP  sebagai  kerangka  kerja  evolusioner.  Representasi  solusi 
+
+menggunakan  kromosom  satu  dimensi  berupa  urutan  node  pelanggan  yang 
+
+dipisahkan oleh marker depot. Fungsi fitness menggabungkan total jarak tempuh 
+
+dengan penalti dinamis untuk pelanggaran kapasitas dan batas waktu. 
+
+49 
+
+ 
+ 
+ 
+ 
+ 
+Operator genetik yang digunakan meliputi:  
+
+1.  Tournament Selection (ukuran turnamen = 3) untuk pemilihan induk  
+
+2.  Ordered  Crossover  (OX) untuk  menghasilkan  offspring  yang  valid  - Swap 
+
+Mutation untuk diversifikasi populasi  
+
+3.  2-opt dan Relocation sebagai operator local search yang diterapkan pada 
+
+setiap individu setelah operasi genetik.  
+
+Potongan kode lengkap implementasi HGA disajikan pada Gambar L3.16. 
+
+3.2.5 Implementasi Solver MILP 
+
+Solver 
+
+MILP 
+
+diimplementasikan 
+
+dalam 
+
+modul algorithms/milp.py menggunakan gurobipy.  Model 
+
+yang 
+
+dibangun 
+
+mengikuti  formulasi  matematika  yang  telah  didefinisikan  pada  Subbab  2.4, 
+
+mencakup variabel keputusan biner penugasan kendaraan ke rute, fungsi objektif 
+
+minimisasi total jarak, serta constraint kapasitas dan sub-tour elimination (Miller-
+
+Tucker-Zemlin). Solver ini dibatasi hanya untuk dataset dengan jumlah total node 
+
+≤ 25 (depot + pelanggan) karena sifat eksponensial dari permasalahan MILP pada 
+
+skala lebih besar. Potongan kode MILP disajikan pada Gambar L3.17. 
+
+3.2.6 Implementasi Sistem Eksekusi dan Live Monitoring 
+
+Setiap solver dijalankan sebagai proses Python terpisah (subprocess) agar 
+
+tidak  memblokir  web  server  Django.  Proses  eksekusi  dimonitor  melalui 
+
+mekanisme  HTTP  polling  berbasis  Fetch  API  dari  sisi  klien  yang  meminta 
+
+50 
+
+ 
+ 
+ 
+ 
+ 
+pembaruan status ke endpoint Django secara periodik. Informasi yang ditampilkan 
+
+secara real-time meliputi persentase progres, nilai objektif terbaik saat ini (best 
+
+distance), serta log algoritma. Pengguna dapat menghentikan proses kapan saja 
+
+melalui  tombol Stop,  yang  mengirimkan  sinyal  ke  PID  proses  yang  tersimpan  di 
+
+tabel experiments. 
+
+3.2.7 Implementasi Visualisasi dan Ekspor Hasil 
+
+Visualisasi  rute  ditampilkan  dalam  bentuk  peta  2D  berbasis  koordinat 
+
+Kartesian menggunakan Leaflet.js versi 1.9.4. Setiap rute kendaraan digambarkan 
+
+dengan  warna  berbeda;  pengguna  dapat  menampilkan  atau  menyembunyikan 
+
+rute per kendaraan maupun per depot menggunakan filter interaktif. 
+
+Fitur ekspor menyediakan tiga format:  
+
+1.  CSV: berisi detail rute per kendaraan (urutan node, jarak, waktu tempuh, 
+
+muatan)  
+
+2.  PDF: 
+
+laporan  ringkasan  eksperimen  yang  dihasilkan  menggunakan 
+
+pustaka reportlab  
+
+3.  GeoJSON:  berisi  koordinat  rute  dalam  format  standar  geospasial  untuk 
+
+keperluan integrasi dengan alat pemetaan eksternal 
+
+Screenshot  antarmuka  sistem  (Dashboard,  Upload,  Dataset  View, 
+
+Konfigurasi Solver, Live Run, Hasil dan Ekspor) disajikan pada Lampiran 19. 
+
+51 
+
+ 
+ 
+ 
+ 
+ 
+ 
+BAB IV 
+
+PENGUJIAN 
+
+4.1. Cara Pengujian 
+
+Pengujian  sistem  dilakukan  dalam  dua  tahap.  Tahap  pertama  adalah 
+
+pengujian 
+
+fungsionalitas 
+
+aplikasi  menggunakan 
+
+pendekatan blackbox 
+
+testing untuk  memverifikasi  bahwa  setiap  fitur  dan  modul  berperilaku  sesuai 
+
+dengan  spesifikasi  rancangan.  Tahap  kedua  adalah  pengujian  ke  pengguna 
+
+melalui User  Acceptance  Testing (UAT)  menggunakan  kuesioner  daring  untuk 
+
+mengevaluasi  kemudahan  penggunaan  dan  kegunaan  sistem  dari  perspektif 
+
+pengguna. 
+
+4.1.1. Cara Pengujian Fungsionalitas Aplikasi 
+
+Pengujian fungsionalitas dilakukan  dengan pendekatan Blackbox  Testing, 
+
+yaitu pengujian yang berfokus pada perilaku masukan dan keluaran sistem tanpa 
+
+mempertimbangkan struktur internal kode. Untuk setiap modul atau fitur utama, 
+
+didefinisikan sejumlah skenario pengujian yang mencakup kondisi normal (happy 
+
+path) maupun kondisi perbatasan atau kegagalan (edge case/error case). 
+
+Modul-modul yang diuji meliputi:  
+
+1.  Autentikasi dan Manajemen Akun  
+
+Registrasi,  login  berhasil,  login  gagal  (password  salah,  akun  tidak  ada), 
+
+logout, penghapusan akun, mode tamu, serta validasi token sesi.  
+
+2.  Unggah dan Manajemen Dataset  
+
+52 
+
+ 
+ 
+ 
+ 
+Unggah file  XLSX  valid, unggah file  CSV  valid,  unggah  file  dengan  format 
+
+kolom salah, unggah file kosong, validasi referensi silang (misalnya vehicle 
+
+merujuk depot yang tidak ada), serta penghapusan dataset.  
+
+3.  Konfigurasi dan Eksekusi Solver 
+
+Pemilihan algoritma (Greedy, HGA, MILP), pengisian parameter HGA valid 
+
+dan tidak valid, eksekusi MILP pada dataset > 25 node (harus ditolak), serta 
+
+penghentian eksperimen (kill).  
+
+4.  Live Run Viewer 
+
+Tampilan  progress  bar,  pembaruan  log  algoritma,  perubahan  status 
+
+eksperimen.  
+
+5.  Dashboard Hasil 
+
+Tampilan  peta  rute,  fungsi  filter  kendaraan/depot,  tabel  ringkasan  rute, 
+
+indikator pelanggaran kapasitas, grafik perbandingan algoritma. 
+
+6.  Ekspor 
+
+Unduh CSV hasil rute, unduh laporan PDF, unduh GeoJSON rute. 
+
+Seluruh  skenario  dan  hasil  pengujian  blackbox  ditabulasikan  pada Tabel 
+
+L4.1 di  Lampiran  17.  Tabel  tersebut  memuat  kolom:  No.,  Fitur/Modul,  Skenario 
+
+Pengujian,  Data  Masukan,  Hasil  yang  Diharapkan,  Hasil  Aktual,  dan  Status 
+
+(Lulus/Tidak Lulus). 
+
+53 
+
+ 
+ 
+ 
+4.1.2. Cara Pengujian ke Pengguna 
+
+Pengujian  ke  pengguna  dilakukan  melalui User  Acceptance  Testing 
+
+(UAT) berbasis  kuesioner  daring  yang  disebarkan  menggunakan  Google  Form 
+
+selama periode 15 Mei – 18 Mei 2026. Responden berjumlah 12 orang yang terdiri 
+
+dari mahasiswa S1 (10 orang), lulusan S1 (1 orang), dan mahasiswa S2 (1 orang), 
+
+dengan  latar  belakang  keilmuan  Ilmu  Komputer,  Sistem  Informasi,  dan  Riset 
+
+Operasional.  Pengujian  dilakukan  secara online,  di  mana  responden  mengakses 
+
+sistem melalui URL yang disediakan menggunakan domain pribadi yang diteruskan 
+
+melalui  Cloudflare  Tunnel,  kemudian  menyelesaikan  tiga  skenario  penggunaan 
+
+yang telah ditetapkan sebelum mengisi kuesioner. 
+
+Kuesioner terdiri dari tujuh bagian: (1) informasi demografis, (2) panduan 
+
+skenario  pengujian  terstruktur  yang  terdiri  dari  tiga  skenario  (Pengguna 
+
+Baru, Menjalankan  Algoritma,  dan Analisis  Hasil)  yang  diselesaikan  sebelum 
+
+menjawab  pertanyaan  penilaian,  (3)  penilaian  kemudahan  penggunaan  sistem 
+
+(usability) menggunakan skala Likert 1–5 sebanyak 21 item, (4) penilaian kegunaan 
+
+fitur-fitur  sistem  (usefulness)  sebanyak  7  item,  (5)  persepsi  terhadap  performa 
+
+algoritma  sebanyak  6  item,  (6)  kepuasan  keseluruhan  sebanyak  4  item,  dan  (7) 
+
+masukan  terbuka  sebanyak  5  pertanyaan.  Pengisian  kuesioner  diperkirakan 
+
+membutuhkan waktu sekitar 15–20 menit. Instrumen kuesioner lengkap disajikan 
+
+pada Lampiran 16. 
+
+54 
+
+ 
+ 
+ 
+4.2. Hasil Pengujian 
+
+Pengujian modul autentikasi mencakup 12 skenario yang meliputi proses 
+
+registrasi akun baru, login dengan kredensial yang benar dan salah, pengelolaan 
+
+sesi, mode tamu, serta penghapusan akun. Seluruh hasil pengujian ditabulasikan 
+
+pada Tabel L4.1 di Lampiran 17. 
+
+Secara  keseluruhan,  seluruh  skenario  pada  modul  ini  menghasilkan 
+
+status Lulus, dengan sistem merespons sesuai spesifikasi rancangan. Fitur mode 
+
+tamu berfungsi dengan benar di mana sesi dibatasi oleh waktu kadaluwarsa, dan 
+
+penghapusan akun berhasil menghapus seluruh data terkait secara kaskade sesuai 
+
+constraint basis data. 
+
+4.2.1 Hasil Pengujian Modul Autentikasi dan Manajemen Akun 
+
+Pengujian modul unggah dataset mencakup 14 skenario, termasuk unggah 
+
+file  XLSX  valid  (5  sheet),  unggah 5  file  CSV  terpisah,  berbagai  kondisi  kesalahan 
+
+format,  dan  validasi  referensi  silang  antar  tabel.  Seluruh  hasil  pengujian 
+
+ditabulasikan pada Tabel L4.1 di Lampiran 17. 
+
+Sistem berhasil memvalidasi dan menolak file dengan format tidak sesuai, serta 
+
+memberikan  pesan  kesalahan  yang  informatif  kepada  pengguna.  Proses  pre-
+
+komputasi jarak berjalan otomatis setelah dataset berhasil diunggah. 
+
+55 
+
+ 
+ 
+ 
+ 
+4.2.2 Hasil Pengujian Modul Unggah dan Manajemen Dataset 
+
+Pengujian modul unggah dataset mencakup 13 skenario, termasuk unggah 
+
+file  XLSX  valid  (5  sheet),  unggah 5  file  CSV  terpisah,  berbagai  kondisi  kesalahan 
+
+format,  dan  validasi  referensi  silang  antar  tabel.  Seluruh  hasil  pengujian 
+
+ditabulasikan pada Tabel L4.1 di Lampiran. 
+
+Sistem berhasil memvalidasi dan menolak file dengan format tidak sesuai, 
+
+serta memberikan pesan kesalahan yang informatif kepada pengguna. Proses pre-
+
+komputasi jarak berjalan otomatis setelah dataset berhasil diunggah.  
+
+4.2.3 Hasil Pengujian Modul Konfigurasi dan Eksekusi Solver 
+
+Pengujian  modul  solver  mencakup 18  skenario,  terdiri  dari  9  skenario 
+
+konfigurasi  dan  eksekusi  solver  (akses  halaman  konfigurasi,  pembuatan  batch 
+
+untuk  pengguna  teregistrasi  dan  tamu,  pemilihan  kombinasi  algoritma, 
+
+penyimpanan  parameter  HGA,  polling  status  live  run,  serta  penghentian  proses 
+
+secara paksa) dan 9 skenario pengujian kebenaran algoritma (Greedy, HGA, dan 
+
+MILP  masing-masing  diverifikasi  menghasilkan  status  solusi  feasible,  melayani 
+
+seluruh pelanggan, dan nilai total jarak positif). Solver MILP tidak disertakan dalam 
+
+skenario  kebenaran  algoritma  karena  kelayakan  solusinya  dijamin  secara 
+
+matematis oleh formulasi model. Solver MILP hanya menghasilkan solusi apabila 
+
+solusi feasible memang ada, sehingga verifikasi blackbox terpisah tidak diperlukan; 
+
+kebenaran keluarannya tercermin pada hasil pengujian performa di Subbab 4.2.5. 
+
+Seluruh hasil pengujian ditabulasikan pada Tabel L4.1 di Lampiran. 
+
+56 
+
+ 
+ 
+4.2.4 Hasil Pengujian Modul Live Run, Dashboard Hasil, dan Ekspor 
+
+Pengujian  modul  visualisasi  hasil  dan  ekspor  mencakup 7  skenario, 
+
+meliputi akses dashboard oleh pemilik, penolakan akses oleh bukan pemilik dan 
+
+pengguna anonim, akses via share token, serta penolakan unduhan CSV, PDF, dan 
+
+GeoJSON pada eksperimen yang belum selesai. Pengujian live run viewer (polling 
+
+status  dan  penghentian  proses)  tercakup  dalam  skenario  modul  solver  pada 
+
+Subbab 4.2.3. Filter rute pada peta berfungsi sesuai spesifikasi. Fitur unduh CSV 
+
+dan PDF menghasilkan file yang valid dan dapat dibuka. Seluruh hasil pengujian 
+
+ditabulasikan pada Tabel L4.1 di Lampiran. 
+
+4.2.5 Hasil Pengujian Algoritma Optimasi 
+
+Pengujian  performa  algoritma  dilakukan  dengan  menjalankan  ketiga 
+
+algoritma  (Greedy,  HGA,  MILP)  pada  enam  skala  dataset  sintetis  yang  berbeda, 
+
+yaitu 5, 10, 15, 50, 100, dan 200 node (total depot + pelanggan), serta satu dataset 
+
+validasi realistis berskala 50 node yang menggunakan data lokasi dan pesanan dari 
+
+skenario  distribusi  nyata.  Setiap  instance  dijalankan  dengan  parameter  default, 
+
+yaitu HGA: 100 generasi, ukuran populasi 50, mutation rate 0,1, crossover rate 0,8, 
+
+stagnation limit 20 generasi, dan random seed 42; serta MILP dengan batas waktu 
+
+3.600 detik. Untuk dataset dengan lebih dari 25 node, solver MILP tidak dijalankan 
+
+sesuai  batasan  sistem.  Seluruh  hasil  lengkap  per-rute  kendaraan  disajikan  pada 
+
+Tabel L4.2 dan Tabel L4.3. 
+
+57 
+
+ 
+ 
+ 
+Tabel 4.1 Perbandingan Performa Algoritma Lintas Skala Dataset 
+
+Instance 
+
+Depot  Cust.  Kend. 
+
+5 node 
+10 node 
+15 node 
+50 node 
+100 node 
+200 node 
+50 node 
+(realistis) 
+
+2 
+2 
+2 
+3 
+5 
+8 
+
+3 
+
+5 
+8 
+13 
+47 
+95 
+192 
+
+47 
+
+2 
+3 
+5 
+4 
+12 
+27 
+
+4 
+
+Greedy 
+(km) 
+140,89 
+177,68 
+118,20 
+255,01 
+439,65 
+708,06 
+
+HGA 
+(km) 
+132,28 
+160,06 
+103,76 
+230,96 
+387,75 
+873,43 
+
+MILP 
+(km) 
+132,28 
+160,06 
+104,99 
+- 
+- 
+- 
+
+Greedy 
+(s) 
+0,13 
+0,13 
+0,14 
+0,47 
+1,20 
+4,73 
+
+HGA 
+(s) 
+0,55 
+0,68 
+1,19 
+32,74 
+65,63 
+247,02 
+
+MILP (s) 
+
+2,72 
+43,12 
+3602,14 
+- 
+- 
+- 
+
+302,66 
+
+243,75 
+
+- 
+
+0,45 
+
+18,40 
+
+- 
+
+Keterangan: "–" = tidak dijalankan (MILP hanya tersedia untuk ≤ 25 node). 
+
+Ditinjau dari kualitas solusi, HGA secara konsisten menghasilkan total jarak 
+
+tempuh  yang  lebih  kecil  dibandingkan  Greedy  pada  dataset  skala  kecil  hingga 
+
+menengah (5–100 node). Selisih peningkatan kualitas solusi HGA terhadap Greedy 
+
+dihitung sebagai berikut: 
+
+Tabel 4.2 Peningkatan Kualitas Solusi HGA terhadap Greedy 
+
+Instance  Greedy (km)  HGA (km) 
+140,89 
+5 node 
+177,68 
+10 node 
+118,20 
+15 node 
+50 node 
+255,01 
+100 node  439,65 
+200 node  708,06 
+302,66 
+50  node 
+(realistis) 
+
+132,28 
+160,06 
+103,76 
+230,96 
+387,75 
+873,43 
+243,75 
+
+Peningkatan HGA (%) 
+6,11% 
+9,92% 
+12,22% 
+9,43% 
+11,80% 
+–23,35% 
+19,47% 
+
+Pada  instance  200  node,  HGA  menghasilkan total  jarak  yang  lebih  besar 
+
+dari  Greedy  (873,43  km  vs  708,06  km),  menandakan  bahwa  HGA  gagal 
+
+berkovergensi ke solusi yang baik pada skala ini. Hal ini dibahas lebih lanjut pada 
+
+Subbab 4.4. 
+
+58 
+
+ 
+ 
+ 
+ 
+Dibandingkan dengan MILP pada dataset kecil, HGA berhasil menemukan 
+
+solusi  yang  identik dengan  solusi  optimal  pada dataset  5  dan  10  node  (masing-
+
+masing 132,28 km dan 160,06 km). Pada dataset 15 node, HGA (103,76 km) justru 
+
+menghasilkan solusi yang lebih baik daripada MILP (104,99 km). Hal ini disebabkan 
+
+MILP mencapai batas waktu 3.600 detik (1 jam) sehingga solusi yang dikembalikan 
+
+adalah solusi terbaik dalam batas waktu tersebut, bukan solusi optimal sejati. Ini 
+
+menunjukkan  bahwa  pada  dataset  dengan  13  pelanggan  dan  5  kendaraan, 
+
+kompleksitas  MILP  sudah  cukup  tinggi  sehingga  solver  eksak  tidak  dapat 
+
+menemukan  solusi  optimal  dalam  waktu  yang  wajar,  sementara  HGA  masih 
+
+mampu memberikan solusi berkualitas tinggi dalam 1,19 detik. 
+
+Sebagai  pelengkap  pengujian  berbasis  dataset  sintetis,  dilakukan  pula 
+
+pengujian  menggunakan  satu  dataset  validasi  realistis  berskala  50  node  yang 
+
+merepresentasikan skenario distribusi aktual. Dataset ini terdiri dari 3 depot, 47 
+
+pelanggan,  dan  4  kendaraan  dengan  lokasi  yang  bersumber  dari  koordinat 
+
+geografis  nyata  di  wilayah  Jakarta  Barat  dan  sekitarnya.  Produk  yang 
+
+didistribusikan adalah dua varian camilan kemasan (ODANG BARBEQUE 22GR dan 
+
+ODANG  GARLIC  22GR,  masing-masing  0,022  kg/unit)  dengan  total  permintaan 
+
+752,88  kg.  Pada  dataset  realistis  ini,  HGA  menghasilkan  total  jarak  243,75  km 
+
+dibandingkan Greedy 302,66 km, dengan peningkatan sebesar 19,47% — selisih 
+
+yang  lebih  besar  dibandingkan  instance  sintetis  50  node  (9,43%).  Hal  ini 
+
+menunjukkan bahwa pada kondisi distribusi permintaan dan jarak antar node yang 
+
+mencerminkan  data  nyata,  HGA  memberikan  keunggulan  yang  lebih  signifikan 
+
+59 
+
+ 
+dibandingkan  Greedy.  Hasil  rinci  per  kendaraan  disajikan  pada  Tabel  L4.2  dan 
+
+Tabel L4.3. 
+
+Dari sisi waktu komputasi, Greedy memiliki waktu yang sangat cepat dan 
+
+hampir konstan (< 5 detik bahkan untuk 200 node), menjadikannya pilihan yang 
+
+cocok untuk kebutuhan estimasi cepat. HGA memerlukan waktu yang jauh lebih 
+
+lama seiring bertambahnya skala, namun  masih dalam batas praktis hingga 100 
+
+node (~66 detik). Pada 200 node, waktu HGA mencapai 247 detik (~4 menit). MILP 
+
+hanya praktis untuk dataset sangat kecil (≤ 10 node dengan waktu < 1 menit); pada 
+
+15 node sudah memerlukan lebih dari 1 jam. 
+
+Grafik perbandingan total jarak dan waktu komputasi lintas skala disajikan 
+
+pada Gambar L4.11 dan Gambar L4.12. 
+
+4.3 Hasil Pengujian dengan Pengguna 
+
+Pengujian penerimaan pengguna (User Acceptance Testing, UAT) dilakukan 
+
+terhadap 12  responden yang  mengakses  sistem  melalui  URL  yang  disediakan 
+
+selama periode 15 Mei – 18 Mei 2026. Responden mengisi kuesioner daring yang 
+
+telah  disiapkan  melalui  Google  Form  setelah  menyelesaikan  tiga  skenario 
+
+penggunaan yang telah ditentukan. Komposisi responden terdiri dari mahasiswa 
+
+S1  (10  orang),  lulusan  S1  (1  orang),  dan  mahasiswa  S2  (1  orang).  Instrumen 
+
+kuesioner lengkap disajikan pada Lampiran 16. 
+
+60 
+
+ 
+ 
+ 
+Profil demografi responden disajikan pada Tabel 4.3. Distribusi responden 
+
+mencakup empat dimensi: gelar akademis, bidang keilmuan, pengalaman dengan 
+
+permasalahan VRP, serta frekuensi keterlibatan dalam kegiatan logistik. 
+
+Tabel 4.3 Profil Demografi Responden UAT 
+
+Dimensi 
+
+Gelar 
+
+Bidang Keilmuan 
+
+Pengalaman VRP 
+
+Frekuensi Logistik 
+
+Kategori 
+Mahasiswa S1 
+Lulusan S1 
+Mahasiswa S2 
+Ilmu Komputer 
+Sistem Informasi 
+Riset Operasional 
+Tidak pernah 
+Sedikit 
+Sedang 
+Tidak pernah 
+Jarang 
+Teratur 
+
+Jumlah Responden 
+10 
+1 
+1 
+8 
+3 
+1 
+5 
+4 
+3 
+7 
+4 
+1 
+
+Tabel 4.4  Rata-rata Skor Kemudahan Penggunaan (Usability) per Aspek 
+
+No 
+
+Item Kemudahan Penggunaan 
+
+Halaman awal sistem mudah dipahami 
+Proses registrasi/login intuitif 
+
+1 
+2 
+3  Mode tamu memudahkan penggunaan awal sistem 
+4 
+5 
+6 
+7 
+8 
+9 
+10  Progress  bar  menunjukkan  perkembangan  pekerjaan  dengan 
+
+Struktur menu navigasi jelas dan logis 
+Form pengunggahan dataset mudah diikuti 
+Persyaratan format dataset jelas dijelaskan 
+Validasi error pada form membantu memperbaiki input 
+Halaman konfigurasi algoritma parameternya jelas 
+Proses menjalankan solver tidak membingungkan 
+
+jelas 
+Informasi live selama proses berjalan berguna 
+
+11 
+12  Fitur stop/kill eksperimen berguna 
+13  Dashboard hasil menampilkan informasi secara lengkap 
+14  Peta visualisasi rute mudah dipahami 
+15  Filter rute pada peta mudah digunakan 
+
+61 
+
+Rata-
+rata 
+4,33 
+4,33 
+4,58 
+4,50 
+4,58 
+4,58 
+4,33 
+4,50 
+4,42 
+4,50 
+
+4,58 
+4,42 
+4,42 
+4,42 
+4,58 
+
+ 
+ 
+16  Tabel ringkasan rute informatif 
+17  Peringatan pelanggaran kapasitas ditampilkan dengan jelas 
+18  Fitur unduh CSV berguna untuk analisis lebih lanjut 
+19  Fitur unduh PDF memberikan laporan yang profesional 
+20  Sistem berjalan tanpa gangguan atau crash 
+21  Secara keseluruhan, sistem mudah digunakan 
+
+Rata-rata Keseluruhan 
+
+4,58 
+4,58 
+4,58 
+4,58 
+4,58 
+4,50 
+4,50 
+
+Dari  sisi  kemudahan  penggunaan  (usability),  rata-rata  nilai  dari  12 
+
+responden untuk setiap aspek disajikan pada Tabel 4.4 dan Gambar L4.3. Secara 
+
+keseluruhan,  rata-rata  skor  usability  adalah 4,50 dari  skala  5,  yang  dapat 
+
+diinterpretasikan  sebagai Setuju terhadap  kemudahan  penggunaan  sistem. 
+
+Penilaian  ini  didasarkan  pada  21  item  Likert  yang  mencakup  aspek  navigasi, 
+
+kejelasan  antarmuka,  konsistensi  tata 
+
+letak,  kemudahan  unggah  dataset, 
+
+keterbacaan  hasil,  serta  kelancaran  alur  eksekusi  solver.  Skor  tertinggi  (4,58) 
+
+diperoleh pada sejumlah aspek, antara lain kemudahan akses mode tamu, form 
+
+unggah dataset, keterbacaan format dataset, informasi status eksekusi secara live, 
+
+fungsi filter peta, dan kelengkapan informasi pada halaman hasil. Sementara itu, 

@@ -1,0 +1,683 @@
+an 
+
+29 
+
+ 
+ 
+ 
+melebihi  Qk;  penalti  waktu  diberikan  oleh  αtime  dikalikan  selisih  antara  waktu 
+
+kedatangan pelanggan dan batas waktu Lj jika terlambat, serta penalti operasi αop 
+
+bagi  kendaraan  yang  melewati  Tk.  Penyesuaian  konstanta  penalti  dilakukan 
+
+empiris  agar  solusi  infeasible  tetap  dapat  dievaluasi  namun  tidak  menarik 
+
+perhatian seleksi secara berlebihan. Dengan cara ini, fitness merupakan kombinasi 
+
+linear  dari  jarak  total  dan  semua  pelanggaran  constraint  sehingga  algoritma 
+
+evolusioner  diarahkan  untuk  menemukan  rute  yang  memenuhi  semua  batasan 
+
+sekaligus meminimalkan jarak. 
+
+2.6.3 Operator Crossover dan Mutasi 
+
+UUntuk  menghasilkan  keturunan  baru  dalam  algoritma  genetika, 
+
+digunakan  Order  Crossover  (OX)  sebagai  operator  crossover  [10].  OX  bekerja 
+
+dengan menyalin satu atau beberapa bagian dari salah satu induk ke kromosom 
+
+anak pada titik potong yang telah dipilih, kemudian mengisi bagian yang tersisa 
+
+dengan nilai  lain  yang tidak  termasuk dalam  bagian  yang  telah  disalin tersebut. 
+
+Mekanisme 
+
+ini  menjaga  urutan  relatif  pelanggan  sehingga  cocok  untuk 
+
+permasalahan  yang  berbasis  pengurutan  seperti  MDVRP.  Setelah  crossover, 
+
+diterapkan mutasi swap, yaitu menukar posisi dua pelanggan secara acak dalam 
+
+kromosom untuk memperkenalkan variasi dan menjaga diversitas populasi [15]. 
+
+Setelah  setiap  operasi  crossover  dan  mutasi,  kromosom  di-decode  kembali 
+
+menjadi  rute  kendaraan,  dan  jika  terdapat  pelanggaran  kapasitas  atau  batas 
+
+waktu,  dilakukan  perbaikan  sederhana  sebelum  perhitungan  fitness.  Kombinasi 
+
+30 
+
+ 
+ 
+ 
+OX dan mutasi swap membantu algoritma menjaga kualitas solusi sekaligus tetap 
+
+mengeksplorasi ruang solusi secara efektif. 
+
+2.6.4 Integrasi Local Search: 2-opt dan Relocation 
+
+Algoritma genetika dapat dikombinasikan dengan teknik local search untuk 
+
+memperbaiki kualitas solusi yang telah dibentuk. Pada perancangan ini, digunakan 
+
+operator 2-opt sebagai perbaikan lokal pada rute kendaraan dengan cara menukar 
+
+dua  sisi  dalam  rute  untuk  memperoleh  jarak  tempuh  yang  lebih  pendek  [11]. 
+
+Selain itu, digunakan operator relocation, yaitu memindahkan satu pelanggan dari 
+
+satu  posisi  ke  posisi  lain  dalam  rute  yang  sama  atau  antar  rute  kendaraan, 
+
+sehingga  memungkinkan  peningkatan  intra-route  maupun  inter-route  sekaligus 
+
+mematuhi  batasan  kapasitas  dan  waktu  [11].  Kombinasi  kedua  operator  ini 
+
+digunakan  untuk  meningkatkan  kualitas  solusi  secara  lokal  sebelum  proses 
+
+evaluasi fitness dilakukan. 
+
+2.6.5 Langkah-Langkah Algoritma Genetika Hybrid 
+
+Proses  algoritma  genetika  hybrid,  yaitu  algoritma  genetika  yang 
+
+dikombinasikan dengan metode local search, untuk permasalahan MDVRP dapat 
+
+divisualisasikan  dalam  bentuk  flowchart  yang  ditunjukkan  pada  Lampiran  4. 
+
+Berdasarkan  flowchart  tersebut,  algoritma 
+
+ini  mengikuti 
+
+langkah-langkah 
+
+terstruktur sebagai berikut:  
+
+1.  Inisialisasi dan Evaluasi Populasi Awal: 
+
+31 
+
+ 
+ 
+ 
+ 
+ 
+Secara umum, algoritma genetika memulai proses dengan membangkitkan 
+
+populasi  awal  secara  acak,  kemudian  mengevaluasi  setiap  individu 
+
+berdasarkan  nilai  fitness  [9].  Pada  implementasi  perancangan  ini,  setiap 
+
+kromosom  merepresentasikan  urutan  pelanggan  beserta  simbol  depot, 
+
+lalu  didekodekan  menjadi  rute  kendaraan.  Nilai 
+
+fitness  dihitung 
+
+berdasarkan  total  jarak  tempuh  serta  penalti  terhadap  pelanggaran 
+
+kapasitas dan waktu. 
+
+2.  Seleksi Individu 
+
+Algoritma genetika melakukan seleksi terhadap individu berdasarkan nilai 
+
+fitness  untuk  menentukan  induk  yang  akan  digunakan  pada  proses 
+
+reproduksi  berikutnya  [9].  Salah  satu  metode  seleksi  yang  umum 
+
+digunakan 
+
+adalah 
+
+tournament 
+
+selection, 
+
+yang  dipilih 
+
+karena 
+
+kesederhanaan 
+
+implementasi  dan  kemampuannya  dalam  mengatur 
+
+tekanan seleksi [14]. 
+
+3.  Crossover dan Mutasi 
+
+Algoritma  genetika  menghasilkan  individu  baru  melalui proses  crossover 
+
+dan  mutasi  terhadap  pasangan  induk  terpilih  [9].  Pada  penelitian  ini, 
+
+digunakan operator Order Crossover (OX) untuk menghasilkan keturunan 
+
+baru  [10].  Selanjutnya,  dilakukan  mutasi  swap  pada  keturunan  tersebut 
+
+untuk memperkenalkan variasi lokal, yaitu dengan menukar posisi dua gen 
+
+dalam kromosom [15]. 
+
+4.  Penerapan Local Search 
+
+32 
+
+ 
+Metode local search digunakan untuk meningkatkan kualitas solusi dengan 
+
+melakukan  perbaikan  terhadap  rute  yang  dihasilkan,  seperti  melalui 
+
+operator 2-opt dan relocation [11]. Pada perancangan ini, kedua metode 
+
+tersebut  diterapkan  pada  setiap  individu  hasil  crossover  dan  mutasi 
+
+sebelum  proses  evaluasi  fitness  dilakukan,  dengan  tujuan  meningkatkan 
+
+kualitas rute baik secara intra-rute maupun inter-rute. 
+
+5.  Pembaruan Populasi (Replacement) 
+
+Populasi  diperbarui  untuk  membentuk  generasi  selanjutnya  dengan 
+
+mempertahankan  individu-individu  terbaik  melalui  mekanisme  elitisme 
+
+[9].  Pada  penelitian  ini,  individu  dengan  kualitas  rendah  digantikan  oleh 
+
+individu baru hasil proses reproduksi. 
+
+6.  Pengecekan Kriteria Terminasi 
+
+Proses  algoritma  diulang  dari  tahap  seleksi  hingga  pembaruan  populasi 
+
+sampai  kriteria  terminasi  tercapai  [9].  Kriteria  terminasi  dapat  berupa 
+
+jumlah  generasi  maksimum,  batas  waktu  komputasi,  atau  kondisi  ketika 
+
+tidak terjadi peningkatan nilai fitness yang signifikan. 
+
+Melalui  proses  ini,  algoritma  hybrid  diarahkan  untuk  menemukan  solusi 
+
+rute  kendaraan  yang  memenuhi  semua  batasan  MDVRP  sambil  meminimalkan 
+
+total jarak tempuh. 
+
+33 
+
+ 
+ 
+2.6.6 Contoh Eksekusi Algoritma Genetika Hybrid dengan 2-Opt dan Relocation 
+
+Contoh  eksekusi  algoritma  genetic  pada  subbab  ini  menggunakan  data 
+
+yang sama seperti pada Subbab 2.4. Representasi solusi dinyatakan dalam bentuk 
+
+kromosom yang memuat urutan pelanggan dengan simbol depot sebagai pemisah 
+
+rute.  Setiap  kromosom  kemudian  di-decode  menjadi  rute  kendaraan  dan 
+
+dievaluasi menggunakan fungsi fitness yang memperhitungkan total jarak tempuh 
+
+serta penalti apabila terjadi pelanggaran kapasitas atau batas waktu. Selanjutnya 
+
+ditunjukkan pada Lampiran 7 tahapan eksekusi algoritma genetika. 
+
+2.7.   Metode Evaluasi 
+
+Evaluasi  performa  algoritma  dalam  perancangan  ini  dilakukan  dengan 
+
+pendekatan yang berbeda berdasarkan skala ukuran permasalahan (jumlah node). 
+
+Pada permasalahan dengan skala kecil (misalnya <= 25 node), kualitas solusi yang 
+
+dihasilkan oleh metode Greedy Cheapest Insertion dan Hybrid Genetic Algorithm 
+
+(HGA) akan divalidasi dengan membandingkannya terhadap solusi optimal global. 
+
+Solusi  optimal  ini  diperoleh  dari  penyelesaian  model  matematis  Mixed  Integer 
+
+Linear  Programming  (MILP)  menggunakan  solver  eksak.  Tingkat  akurasi  dari 
+
+algoritma  heuristik  dan  metaheuristik  kemudian  diukur  menggunakan  metrik 
+
+optimality  gap,  yaitu  persentase  penyimpangan  nilai  objektif  algoritma  usulan 
+
+terhadap solusi optimal yang sebenarnya.  
+
+Sementara  itu,  untuk  permasalahan  berskala  besar,  penyelesaian  eksak 
+
+menggunakan  MILP  tidak  lagi  layak  secara  komputasional  (computationally 
+
+34 
+
+ 
+ 
+ 
+intractable)  mengingat  karakteristik  MDVRP  yang  tergolong  NP-Hard  [4].  Oleh 
+
+karena  itu,  akurasi  mutlak  tidak  dapat  dievaluasi.  Sebagai  gantinya,  metode 
+
+evaluasi  difokuskan  pada  analisis  komparatif  performa  relatif  antara  algoritma 
+
+Greedy dan HGA. Kinerja kedua algoritma tersebut akan dinilai dan dibandingkan 
+
+berdasarkan dua metrik utama, yaitu kualitas rute yang dihasilkan (minimalisasi 
+
+total  jarak  tempuh)  dan  efisiensi  waktu  komputasi  yang  dibutuhkan  untuk 
+
+mencapai solusi yang layak (feasible solution). 
+
+2.8.   Pustaka dan Alat yang Digunakan 
+
+Dalam  mengimplementasikan  MILP,  HGA,  dan  algoritma  greedy  untuk 
+
+MDVRP,  diperlukan  berbagai  pustaka  dan  perangkat  lunak  pendukung  berbasis 
+
+bahasa  pemrograman  Python,  yaitu  bahasa  pemrograman  yang  sangat  populer 
+
+karena  kemudahan  penggunaannya,  sintaksnya  yang  sederhana,  serta 
+
+fleksibilitasnya untuk berbagai jenis proyek teknologi [17]. Bagian ini menjelaskan 
+
+peran  masing-masing  pustaka  dan  alat  tersebut,  mulai  dari  penyediaan  solver 
+
+optimasi,  kerangka  kerja  algoritma  genetika,  hingga  modul  komputasi  numerik 
+
+dan pemrosesan data. 
+
+1.  Gurobi  adalah  solver  komersial  untuk  pemrograman  linear,  integer,  dan 
+
+mixed-integer  yang  sangat  efisien  [18].  Dalam  rancangan  ini,  Gurobi 
+
+digunakan untuk memperoleh solusi optimal sebagai acuan perbandingan 
+
+bagi  hasil  algoritma  pendekatan,  terutama  pada  instance  kecil  atau 
+
+35 
+
+ 
+ 
+ 
+menengah dari MDVRP. Pustaka ini memungkinkan evaluasi kualitas solusi 
+
+serta validasi efektivitas algoritma hybrid yang dikembangkan. 
+
+2.  DEAP  (Distributed  Evolutionary  Algorithms  in  Python)  adalah  kerangka 
+
+kerja  untuk  membangun  dan  menjalankan  algoritma  evolusioner  secara 
+
+modular 
+
+dan 
+
+fleksibel 
+
+[19]. 
+
+Pustaka 
+
+ini 
+
+digunakan 
+
+untuk 
+
+mengimplementasikan  algoritma  genetika  hybrid,  termasuk  generasi 
+
+populasi, seleksi, crossover (OX), mutasi (swap), dan integrasi local search 
+
+(2-opt  dan  relocation).  DEAP  menyediakan  struktur  dasar  sehingga 
+
+pengembangan algoritma menjadi lebih cepat dan terstandarisasi. 
+
+3.  NumPy  adalah  pustaka  untuk  komputasi  numerik  dan  manipulasi  array 
+
+secara  efisien  [20].  Dalam  implementasi  ini,  NumPy  digunakan  untuk 
+
+menyimpan matriks jarak antar pelanggan, menghitung penjumlahan jarak 
+
+rute,  serta  melakukan  operasi  matematis  lain  yang  intensif  secara 
+
+komputasi, sehingga perhitungan rute dan fitness dapat dilakukan secara 
+
+cepat. 
+
+4.  Pandas  adalah  pustaka  Python  untuk  manajemen  dan  analisis  data 
+
+berbasis  struktur  DataFrame  [21].  Pandas  digunakan  untuk  mengelola 
+
+dataset  pelanggan,  depot,  dan  permintaan  barang,  memudahkan  input 
+
+atau  output  data,  serta  mempersiapkan  dataset  untuk  evaluasi  dan 
+
+visualisasi hasil algoritma. 
+
+5.  SciPy menyediakan fungsi-fungsi matematis dan optimisasi tambahan yang 
+
+berguna dalam pengolahan data numerik [22]. Dalam rancangan ini, SciPy 
+
+36 
+
+ 
+digunakan  untuk perhitungan  jarak  Euclidean,  optimisasi tambahan, dan 
+
+fungsi-fungsi  lain  yang  tidak  secara  langsung  disediakan  oleh  NumPy, 
+
+mendukung akurasi dan fleksibilitas komputasi. 
+
+6.  tqdm adalah pustaka Python yang menampilkan progress bar pada proses 
+
+iterasi atau evaluasi, sehingga memudahkan monitoring algoritma selama 
+
+perhitungan panjang atau iterasi ribuan generasi [23]. Penggunaan tqdm 
+
+membantu memvisualisasikan kemajuan komputasi secara real-time dan 
+
+mendeteksi potensi bottleneck. 
+
+2.9    Software Development Life Cycle (SDLC) 
+
+Pengembangan sistem aplikasi ini menggunakan pendekatan Incremental 
+
+Model  dalam  Software  Development  Life  Cycle  (SDLC).  Pendekatan  ini  dipilih 
+
+karena memungkinkan pengembangan sistem dilakukan secara bertahap melalui 
+
+beberapa  increment,  sehingga  setiap  bagian  sistem  dapat  dikembangkan,  diuji, 
+
+dan  dievaluasi  secara  terpisah  sebelum  diintegrasikan  menjadi  satu  kesatuan 
+
+sistem yang utuh. 
+
+Model incremental dinilai lebih fleksibel dibandingkan model linier seperti 
+
+waterfall, karena mampu mengakomodasi perubahan kebutuhan serta perbaikan 
+
+sistem 
+
+selama  proses  pengembangan  berlangsung.  Setiap 
+
+increment 
+
+menghasilkan versi sistem yang dapat digunakan, sehingga memudahkan proses 
+
+evaluasi dan validasi oleh pengguna pada setiap tahap pengembangan [12]. 
+
+37 
+
+ 
+ 
+ 
+Dalam konteks perancangan ini, pendekatan incremental memungkinkan 
+
+pengembangan sistem dilakukan secara bertahap, khususnya dalam membangun 
+
+dan menyempurnakan fitur-fitur yang berkaitan dengan proses optimasi. Dengan 
+
+demikian,  sistem  dapat  dikembangkan  secara  lebih  terstruktur  dan  adaptif 
+
+terhadap kebutuhan yang berkembang selama proses perancangan. 
+
+Representasi  visual  dari  tahapan  model  incremental  dapat  dilihat  pada 
+
+Gambar  2.2,  yang  menunjukkan  proses  pengembangan  sistem  secara  bertahap 
+
+dengan adanya umpan balik pada setiap increment. 
+
+Gambar 2.2 Diagram Incremental Software Development Life Cycle 
+Sumber: Diadaptasi dari Sommerville [12] 
+
+Langkah-langkah  incremental  development  dapat  dijelaskan  sebagai 
+
+berikut [12]: 
+
+1.  Menentukan kebutuhan awal secara umum 
+
+38 
+
+ 
+ 
+Kebutuhan sistem diidentifikasi pada level garis besar terlebih dahulu dan 
+
+belum  dalam  bentuk  spesifikasi  final  yang  lengkap.  Pada  tahap  ini, 
+
+pengguna juga berperan dalam menentukan fungsi yang menjadi prioritas 
+
+utama. 
+
+2.  Menetapkan increment pertama 
+
+Fitur-fitur  dengan  prioritas  tertinggi  dipilih  untuk  dimasukkan  ke  dalam 
+
+increment pertama agar sistem dapat segera menghasilkan versi awal yang 
+
+dapat digunakan. 
+
+3.  Merinci kebutuhan increment pertama 
+
+Kebutuhan  untuk  increment  pertama  dianalisis  dan  didefinisikan  secara 
+
+lebih rinci agar siap untuk diimplementasikan. 
+
+4.  Mengembangkan increment 
+
+Proses pengembangan dilakukan berdasarkan kebutuhan yang telah dirinci 
+
+hingga menghasilkan perangkat lunak yang berfungsi. 
+
+5.  Melakukan validasi dan evaluasi pengguna 
+
+Increment  yang  telah  selesai  dikembangkan  diuji  dan  diberikan  kepada 
+
+pengguna  untuk  memperoleh  masukan.  Evaluasi  ini  penting  karena 
+
+kebutuhan  sistem  dapat  menjadi  lebih  jelas  setelah  pengguna  mencoba 
+
+versi awal. 
+
+6.  Mengintegrasikan dan melanjutkan ke increment berikutnya 
+
+39 
+
+ 
+Hasil  dari  increment  sebelumnya  diintegrasikan  dengan  pengembangan 
+
+baru.  Proses  ini  dilakukan  secara  berulang  hingga  seluruh  kebutuhan 
+
+sistem terpenuhi. 
+
+40 
+
+ 
+ 
+BAB III 
+
+RANCANGAN 
+
+3.1.  Rancangan Sistem 
+
+Aplikasi  ini  dirancang  sebagai  platform  berbasis  web  yang  menyediakan 
+
+solusi komprehensif end-to-end untuk menyelesaikan MDVRP. Secara garis besar, 
+
+sistem beroperasi dengan memandu alur kerja pengguna melewati beberapa fitur 
+
+dan halaman utama, mulai dari persiapan data hingga analisis hasil. 
+
+Alur operasional sistem dimulai dari Dashboard sebagai pusat pemantauan 
+
+ringkasan  eksperimen.  Untuk  memulai  optimasi,  pengguna  memasukkan  dan 
+
+memvalidasi dataset melalui Instance Upload. Selanjutnya, sistem mengarahkan 
+
+pengguna  ke  Solver  Configuration  untuk  menetapkan  algoritma  dan  parameter 
+
+komputasi.  Selama  proses  pencarian  solusi  berjalan,  sistem  menyediakan  fitur 
+
+pemantauan eksekusi secara real-time pada  Live  Run  Viewer. Alur ini diakhiri di 
+
+Results  Page  yang  menyajikan  visualisasi  peta  rute  dan  evaluasi  statistik,  serta 
+
+dilengkapi  dengan  fitur  Export  dan  Reporting  untuk  mengunduh  dokumen  hasil 
+
+akhir eksperimen. 
+
+3.1.1.  Analisis Kebutuhan Sistem 
+
+Analisis kebutuhan sistem bertujuan untuk menjelaskan kebutuhan data, 
+
+perangkat lunak, dan perangkat keras agar aplikasi MDVRP dapat berjalan sesuai 
+
+tujuan perancangan.  
+
+41 
+
+ 
+ 
+ 
+ 
+a.  Dataset yang digunakan dalam perancangan ini bersumber dari data lokasi 
+
+outlet  mitra  internal  yang  dianonimkan  oleh  Sean  Henry  Wijaya,  yang 
+
+kemudian  dipra-proses  menjadi  koordinat  kartesian 
+
+(x,  y)  untuk 
+
+menentukan posisi depot dan pelanggan. Selain data lokasi, sistem ini juga 
+
+memerlukan input data operasional yang mencakup spesifikasi item (berat 
+
+dan masa kedaluwarsa), spesifikasi kendaraan (kapasitas, kecepatan, dan 
+
+depot  asal),  serta  data  pesanan  pelanggan  beserta  jendela  waktu 
+
+pengirimannya. Seluruh parameter data lokasi dan bangkitan data sintetis 
+
+ini  disusun  agar  konsisten  dengan  karakteristik  distribusi  makanan  dan 
+
+minuman,  dengan  rincian  parameter  dan  struktur  data  yang  telah 
+
+dijelaskan pada Subbab 2.3 serta dapat dilihat lebih detail pada Lampiran 
+
+2 untuk sumbernya dan Lampiran 13 untuk 10  baris pertama dari setiap 
+
+tabel data. 
+
+b.  Dari  sisi  perangkat  lunak,  aplikasi  dikembangkan  menggunakan  bahasa 
+
+pemrograman  Python  3.10+,  dengan  framework  web  Django  untuk 
+
+membangun  antarmuka  pengguna.  Backend  optimasi  memanfaatkan 
+
+Gurobi, sedangkan library pendukung seperti DEAP, NumPy, Pandas, SciPy, 
+
+dan tqdm digunakan untuk komputasi, manajemen data, dan proses batch. 
+
+Untuk perangkat keras, konfigurasi minimum yang disarankan mencakup 
+
+prosesor multi-core dengan empat inti atau lebih, RAM minimal 16 GB, dan 
+
+storage SSD untuk mempercepat proses I/O. 
+
+42 
+
+ 
+ 
+3.1.2.  Rancangan Alur Kerja Aplikasi 
+
+Rancangan  alur  kerja  aplikasi  menggambarkan proses dari  pengumpulan 
+
+data hingga evaluasi hasil optimasi dan visualisasi rute kendaraan. Aplikasi dimulai 
+
+dengan  modul  unggah  data,  di  mana  pengguna  dapat  memasukkan  dataset 
+
+berupa  lokasi  depot  dan  pelanggan,  spesifikasi  kendaraan, item,  serta pesanan. 
+
+Data yang diunggah kemudian melewati tahap pra-pemrosesan, yang mencakup 
+
+normalisasi  koordinat,  pemilihan  depot,  pembentukan  rute  awal,  serta  validasi 
+
+kapasitas  dan  batasan  waktu.  Setelah  data  siap,  sistem  akan  mengeksekusi 
+
+metode penyelesaian secara otomatis dan komprehensif. Pada tahap ini, sistem 
+
+dirancang  untuk  menjalankan  algoritma  Greedy  Cheapest  Insertion  dan  Hybrid 
+
+Genetic  Algorithm  (HGA)  secara  serentak  guna  keperluan  analisis  komparatif. 
+
+Apabila permasalahan memiliki ukuran skala kecil (jumlah node ≤ 25), sistem juga 
+
+akan  secara  otomatis  mengikutsertakan  solver  eksak  (MILP)  ke  dalam  proses 
+
+eksekusi.  Meskipun  eksekusi  algoritma  berjalan  bersamaan,  modul  manajemen 
+
+eksperimen  tetap  memberikan  fleksibilitas  bagi  pengguna  melalui  antarmuka 
+
+konfigurasi  untuk  mengatur  parameter  pengujian,  seperti  inisialisasi  seed  acak, 
+
+jumlah run, serta pengaturan batch run guna mengevaluasi berbagai skenario. 
+
+Setelah  konfigurasi  dijalankan,  solver  menghitung  rute  kendaraan  sesuai 
+
+algoritma terpilih, memperhitungkan kapasitas, waktu kedatangan, dan prioritas 
+
+pesanan.  Hasilnya  kemudian  diteruskan  ke  modul  visualisasi,  yang  menyajikan 
+
+peta rute interaktif, statistik per-rute, serta grafik perbandingan jarak dan waktu 
+
+tempuh. Modul terakhir adalah administrasi dan pelaporan, yang memungkinkan 
+
+43 
+
+ 
+ 
+pengguna  mengekspor  hasil  dalam  format  CSV,  PDF,  atau  GeoJSON,  serta 
+
+memantau jalannya eksperimen secara real-time melalui dashboard. 
+
+Untuk  merancang  dan  memodelkan  interaksi  serta  alur  kerja  sistem, 
+
+pengembangan aplikasi ini menggunakan pemodelan visual terstruktur. Interaksi 
+
+fungsional antara pengguna dengan sistem dipetakan menggunakan pendekatan 
+
+Unified Modeling Language (UML) melalui Use Case Diagram yang ditempatkan di 
+
+Lampiran 7. Untuk melengkapi pemodelan tersebut, langkah-langkah navigasi dan 
+
+pengalaman pengguna saat berinteraksi dengan antarmuka aplikasi digambarkan 
+
+secara spesifik melalui User Flow Diagram yang ditempatkan di Lampiran 8. Selain 
+
+itu,  alur  aktivitas  sistem  dalam  menjalankan  setiap  modul  utama  aplikasi 
+
+divisualisasikan menggunakan Activity Diagram yang disajikan pada Lampiran 9. 
+
+3.1.3.  Rancangan Basis Data 
+
+Sistem  menggunakan  model  basis  data  relasional  yang  dirancang 
+
+mengikuti metodologi pengembangan basis data menurut Connolly dan Begg [13]. 
+
+Perancangan  ini  bertujuan  untuk  memodelkan  informasi  permasalahan  MDVRP 
+
+secara  terstruktur,  meliputi  entitas  lokasi  depot,  pelanggan,  kendaraan,  item, 
+
+pesanan, eksperimen, rute, dan metrik hasil. 
+
+Setiap  entitas  direpresentasikan  dalam  tabel  tersendiri  dengan  atribut 
+
+yang relevan, sementara integritas data dijaga melalui penerapan foreign keys dan 
+
+constraints sesuai dengan aturan normalisasi. Sebagai contoh, pesanan pelanggan 
+
+44 
+
+ 
+ 
+ 
+ 
+memiliki relasi terhadap tabe
