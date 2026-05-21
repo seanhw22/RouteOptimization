@@ -95,6 +95,7 @@ def load_experiment_data(experiment_id: int):
     """
     setup_django()
     from src.data_loader import MDVRPDataLoader
+    from src.distance_cache import DistanceCache
     from src.distance_matrix import DistanceMatrixBuilder
     from runs.models import Experiment
 
@@ -105,13 +106,28 @@ def load_experiment_data(experiment_id: int):
 
     nodes = data['depots'] + data['customers']
     builder = DistanceMatrixBuilder(data['coordinates'], data['vehicle_speed'])
-    full = builder.build_all_matrices(
-        data['depots'], data['customers'], data['vehicles'], data['items'],
-        data['coordinates'], data['vehicle_speed'],
-        data['customer_orders'], data['item_weights'],
-        data['vehicle_capacity'], data['max_operational_time'],
-        data['customer_deadlines'], data['depot_for_vehicle']
-    )
+    cache = DistanceCache(experiment.dataset_id, data['coordinates'])
+
+    if cache.is_valid():
+        dist_arr = cache.load()
+        full = builder.build_all_matrices(
+            data['depots'], data['customers'], data['vehicles'], data['items'],
+            data['coordinates'], data['vehicle_speed'],
+            data['customer_orders'], data['item_weights'],
+            data['vehicle_capacity'], data['max_operational_time'],
+            data['customer_deadlines'], data['depot_for_vehicle']
+        )
+        full['dist'] = dist_arr
+    else:
+        full = builder.build_all_matrices(
+            data['depots'], data['customers'], data['vehicles'], data['items'],
+            data['coordinates'], data['vehicle_speed'],
+            data['customer_orders'], data['item_weights'],
+            data['vehicle_capacity'], data['max_operational_time'],
+            data['customer_deadlines'], data['depot_for_vehicle']
+        )
+        cache.save(full['dist'])
+
     # Convert NumPy matrices to dicts (solvers expect dict-style lookups)
     dist_arr = full['dist']
     dist_dict = {a: {b: float(dist_arr[i, j]) for j, b in enumerate(nodes)} for i, a in enumerate(nodes)}

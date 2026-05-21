@@ -62,25 +62,21 @@ class DistanceCache:
         return matrix
 
     def save(self, dist_matrix: np.ndarray) -> None:
-        """Replace any existing cache and persist the new distance matrix."""
+        """Persist the distance matrix; silently skips rows already cached (race-safe)."""
         from datasets.models import NodeDistance
-        from django.db import transaction
 
-        with transaction.atomic():
-            NodeDistance.objects.filter(dataset_id=self.dataset_id).delete()
-            objs = []
-            for i, a in enumerate(self.nodes):
-                for j, b in enumerate(self.nodes):
-                    if i == j:
-                        continue
-                    objs.append(NodeDistance(
-                        dataset_id=self.dataset_id,
-                        node_start_id=a,
-                        node_end_id=b,
-                        distance=float(dist_matrix[i, j]),
-                        travel_time=None,
-                    ))
-            NodeDistance.objects.bulk_create(objs, batch_size=500)
+        objs = []
+        for i, a in enumerate(self.nodes):
+            for j, b in enumerate(self.nodes):
+                if i == j:
+                    continue
+                objs.append(NodeDistance(
+                    dataset_id=self.dataset_id,
+                    node_start_id=a,
+                    node_end_id=b,
+                    distance=float(dist_matrix[i, j]),
+                ))
+        NodeDistance.objects.bulk_create(objs, batch_size=500, ignore_conflicts=True)
 
     @staticmethod
     def _haversine_proxy(p1, p2):
