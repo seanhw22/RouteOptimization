@@ -1,15 +1,11 @@
 """
 MDVRP Greedy Heuristic - Cheapest Insertion
-Based on flowchart algorithm
-Refactored to support NumPy arrays, Pandas I/O, and tqdm
 """
 
 import random
-import math
-import os
 import numpy as np
 import time
-from typing import Dict, List, Tuple, Optional, Callable
+from typing import Dict
 
 
 class MDVRPGreedy:

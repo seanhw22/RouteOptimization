@@ -19,7 +19,7 @@ from .models import Dataset
 from .services import DatasetValidationError, parse_uploaded, save_dataset, validate_frames
 
 _SAMPLE_DATASETS = {
-    '5':   ('5nodes',   'Sample 5 nodes'),
+    '7':   ('7nodes',   'Sample 7 nodes'),
     '10':  ('10nodes',  'Sample 10 nodes'),
     '15':  ('15nodes',  'Sample 15 nodes'),
     '50':  ('50nodes',  'Sample 50 nodes'),

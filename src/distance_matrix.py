@@ -24,27 +24,25 @@ class DistanceMatrixBuilder:
 
     def build_distance_matrix(self, nodes: List[str]) -> np.ndarray:
         """
-        Compute distance matrix using SciPy.
-
-        Uses: Euclidean distance × 111 (degree to km conversion)
-              Matches current implementation but vectorized.
+        Compute distance matrix using SciPy with Haversine metric.
 
         Args:
             nodes: List of node IDs (depots + customers)
 
         Returns:
-            np.ndarray: Square distance matrix where dist_matrix[i,j] is distance from nodes[i] to nodes[j]
+            np.ndarray: Square distance matrix where dist_matrix[i,j] is distance in km from nodes[i] to nodes[j]
         """
-        # Extract coordinates in order
+        import math
+
+        def haversine(u, v):
+            lat1, lon1 = math.radians(u[0]), math.radians(u[1])
+            lat2, lon2 = math.radians(v[0]), math.radians(v[1])
+            dlat, dlon = lat2 - lat1, lon2 - lon1
+            a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            return 6371 * 2 * math.asin(math.sqrt(a))
+
         coords = np.array([self.coordinates[node] for node in nodes])
-
-        # Compute pairwise distances using SciPy
-        dist_matrix = distance.cdist(coords, coords, metric='euclidean')
-
-        # Convert degrees to km (1 degree ≈ 111 km at equator)
-        dist_matrix = dist_matrix * 111
-
-        return dist_matrix
+        return distance.cdist(coords, coords, metric=haversine)
 
     def build_time_matrices(self, nodes: List[str], vehicles: List[str],
                             dist_matrix: np.ndarray) -> Dict[str, np.ndarray]:

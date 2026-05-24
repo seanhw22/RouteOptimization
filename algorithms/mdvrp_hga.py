@@ -1,18 +1,14 @@
 """
 MDVRP Hybrid Genetic Algorithm with DEAP framework
-Refactored to use DEAP, NumPy, Pandas, and tqdm
 """
 
 import random
-import copy
-import math
-import os
 import numpy as np
 import time
-from typing import Dict, List, Tuple, Optional, Callable
+from typing import Dict, List, Tuple, Optional
 
 # DEAP imports
-from deap import base, creator, tools, algorithms
+from deap import base, creator, tools
 
 
 # Define Individual class for DEAP (before MDVRPHGA)

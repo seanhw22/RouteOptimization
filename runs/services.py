@@ -75,7 +75,11 @@ def launch_subprocess(experiment: Experiment) -> int:
     if os.name == 'nt':
         # New process group so Ctrl-C in the parent doesn't kill the child
         # and so we can target it with CTRL_BREAK if ever needed.
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+        # ABOVE_NORMAL_PRIORITY_CLASS keeps solvers off efficiency (E) cores
+        # on hybrid CPUs — without it the child inherits the Django server's
+        # background scheduling and lands on E-cores.
+        ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | ABOVE_NORMAL_PRIORITY_CLASS  # type: ignore[attr-defined]
 
     proc = subprocess.Popen(
         [sys.executable, str(script), '--experiment-id', str(experiment.experiment_id)],

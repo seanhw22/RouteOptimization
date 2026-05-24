@@ -4,6 +4,8 @@ from django.contrib import admin
 from django.shortcuts import redirect
 from django.urls import include, path
 
+from runs.admin_views import stats_dashboard
+
 
 def root_redirect(request):
     if request.user.is_authenticated or request.session.get('is_guest'):
@@ -13,6 +15,7 @@ def root_redirect(request):
 
 urlpatterns = [
     path('', root_redirect, name='root'),
+    path('admin/stats/', admin.site.admin_view(stats_dashboard), name='admin_stats'),
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls', namespace='accounts')),
     path('datasets/', include('datasets.urls', namespace='datasets')),

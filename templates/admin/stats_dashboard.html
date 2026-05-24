@@ -1,0 +1,190 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Stats Dashboard | {{ site_title|default:"Django site admin" }}{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+<style>
+  #stats-dash th,
+  #stats-dash td,
+  #stats-dash p {
+    color: var(--body-fg, #333) !important;
+  }
+  #stats-dash .module-header {
+    padding: 8px 12px;
+    margin: 0;
+    background: #417690;
+    color: #fff !important;
+    font-size: 1em;
+  }
+  #stats-dash table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  #stats-dash th {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color, #ddd);
+    text-align: left;
+  }
+  #stats-dash td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color, #eee);
+  }
+</style>
+{% endblock %}
+
+{% block content_title %}{# suppress duplicate heading — title card rendered below #}{% endblock %}
+
+{% block content %}
+<div id="stats-dash">
+
+<!-- Summary cards -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;">
+  <div style="background:#417690;color:#fff;padding:16px 20px;border-radius:4px;">
+    <div style="font-size:2em;font-weight:bold;line-height:1;">{{ total_users }}</div>
+    <div style="margin-top:4px;opacity:.85;font-size:.9em;">Registered Users</div>
+  </div>
+  <div style="background:#417690;color:#fff;padding:16px 20px;border-radius:4px;">
+    <div style="font-size:2em;font-weight:bold;line-height:1;">{{ total_datasets }}</div>
+    <div style="margin-top:4px;opacity:.85;font-size:.9em;">Datasets Uploaded</div>
+  </div>
+  <div style="background:#417690;color:#fff;padding:16px 20px;border-radius:4px;">
+    <div style="font-size:2em;font-weight:bold;line-height:1;">{{ total_batches }}</div>
+    <div style="margin-top:4px;opacity:.85;font-size:.9em;">Run Batches</div>
+  </div>
+  <div style="background:#417690;color:#fff;padding:16px 20px;border-radius:4px;">
+    <div style="font-size:2em;font-weight:bold;line-height:1;">{{ total_experiments }}</div>
+    <div style="margin-top:4px;opacity:.85;font-size:.9em;">Total Experiments</div>
+  </div>
+  <div style="background:#205067;color:#fff;padding:16px 20px;border-radius:4px;">
+    <div style="font-size:2em;font-weight:bold;line-height:1;">{{ recent_experiments }}</div>
+    <div style="margin-top:4px;opacity:.85;font-size:.9em;">Experiments (last 30d)</div>
+  </div>
+</div>
+
+<!-- Algorithm comparison -->
+<div class="module" style="margin-bottom:24px;">
+  <h2 class="module-header">Algorithm Comparison</h2>
+  {% if algo_stats %}
+  <table>
+    <thead>
+      <tr>
+        <th>Algorithm</th>
+        <th>Total Runs</th>
+        <th>Completed</th>
+        <th>Failed / Killed</th>
+        <th>Success %</th>
+        <th>Avg Objective</th>
+        <th>Avg Runtime (s)</th>
+        <th>Total Violations</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in algo_stats %}
+      <tr>
+        <td><strong>{{ row.algorithm }}</strong></td>
+        <td>{{ row.total }}</td>
+        <td style="color:#0a7 !important;">{{ row.completed }}</td>
+        <td style="color:#c00 !important;">{{ row.failed }}</td>
+        <td>
+          <span style="display:inline-block;
+                       background:{% if row.success_pct >= 80 %}#e6f4ea{% elif row.success_pct >= 50 %}#fff3cd{% else %}#fdecea{% endif %};
+                       color:{% if row.success_pct >= 80 %}#1a7431{% elif row.success_pct >= 50 %}#856404{% else %}#a50e0e{% endif %} !important;
+                       padding:2px 8px;border-radius:10px;font-size:.9em;">
+            {{ row.success_pct }}%
+          </span>
+        </td>
+        <td>{% if row.avg_objective is not None %}{{ row.avg_objective }}{% else %}—{% endif %}</td>
+        <td>{% if row.avg_runtime is not None %}{{ row.avg_runtime }}s{% else %}—{% endif %}</td>
+        <td>{% if row.total_violations is not None %}{{ row.total_violations }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="padding:12px;">No experiments recorded yet.</p>
+  {% endif %}
+</div>
+
+<!-- Bottom row: status breakdown + dataset stats -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+
+  <div class="module">
+    <h2 class="module-header">Experiment Status Breakdown</h2>
+    {% if status_counts %}
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th style="text-align:right;">Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in status_counts %}
+        <tr>
+          <td style="text-transform:capitalize;">{{ row.status }}</td>
+          <td style="text-align:right;font-weight:bold;">{{ row.count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="padding:12px;">No experiments yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="module">
+    <h2 class="module-header">Dataset Stats</h2>
+    <table>
+      <tbody>
+        <tr>
+          <td>Total datasets</td>
+          <td style="font-weight:bold;text-align:right;">{{ total_datasets }}</td>
+        </tr>
+        <tr>
+          <td>Avg nodes per dataset</td>
+          <td style="font-weight:bold;text-align:right;">{{ dataset_avg_nodes }}</td>
+        </tr>
+        <tr>
+          <td>MILP-eligible (≤25 nodes)</td>
+          <td style="font-weight:bold;text-align:right;">{{ dataset_milp_eligible }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- Recent experiments -->
+<div class="module">
+  <h2 class="module-header">Recent Experiments (last 10)</h2>
+  {% if recent_list %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Dataset</th>
+        <th>Algorithm</th>
+        <th>Status</th>
+        <th>Objective</th>
+        <th>Runtime</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for exp in recent_list %}
+      <tr>
+        <td><a href="{% url 'admin:runs_experiment_change' exp.experiment_id %}">{{ exp.experiment_id }}</a></td>
+        <td>{{ exp.dataset.name }}</td>
+        <td>{{ exp.algorithm }}</td>
+        <td style="text-transform:capitalize;">{{ exp.status }}</td>
+        <td>{% if exp.best_objective is not None %}{{ exp.best_objective|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td>{% if exp.metrics and exp.metrics.runtime is not None %}{{ exp.metrics.runtime|floatformat:2 }}s{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="padding:12px;">No experiments yet.</p>
+  {% endif %}
+</div>
+
+</div>{# /stats-dash #}
+{% endblock %}

@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -54,10 +55,24 @@ def run_for_experiment(experiment_id: int, verbose: bool = True) -> int:
             experiment_id=experiment_id,
             log_line=f"Starting optimization (time limit: {time_limit}s, MIP gap: 1%)",
         )
+        def _progress(pct, _total, msg):
+            # Parse best objective from incumbent messages e.g. "Best: 159.76, ..."
+            m = re.search(r'Best:\s*([\d.]+)', msg)
+            best_obj = float(m.group(1)) if m else None
+            # Only write a log line for incumbents and solve-complete; skip
+            # the noisy "Optimizing... nodes=0" heartbeats.
+            meaningful = best_obj is not None or 'complete' in msg.lower()
+            tracker.update_progress(
+                experiment_id=experiment_id,
+                progress_pct=pct,
+                best_objective=best_obj,
+                log_line=msg if meaningful else None,
+            )
+
         solution, status = solver.solve(
             time_limit=time_limit,
             mip_gap=0.01,
-            progress_callback=None,
+            progress_callback=_progress,
             verbose=verbose,
         )
         if solution is not None:

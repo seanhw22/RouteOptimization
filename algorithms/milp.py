@@ -1,15 +1,14 @@
 """
 Multi-Depot Vehicle Routing Problem (MDVRP) Implementation
-Based on the mathematical model from the PDF reference
-Refactored to support Pandas I/O and tqdm progress tracking
 """
 
 import gurobipy as gp
 from gurobipy import GRB
 import os
+import tempfile
 import threading
-from typing import Dict, List, Tuple, Optional, Callable
 import time
+from typing import Dict
 
 
 class MDVRP:
@@ -281,6 +280,7 @@ class MDVRP:
             self.model.Params.TimeLimit = time_limit
         if mip_gap:
             self.model.Params.MIPGap = mip_gap
+        self.model.Params.Threads = 6
 
         # Disable Gurobi output if verbose=False
         if not verbose:
@@ -295,75 +295,82 @@ class MDVRP:
             print(f"Constraints: {self.model.NumConstrs}")
             print("\nOptimizing...")
 
-        # Build Gurobi callback to stream progress through progress_callback
-        _gurobi_cb = None
+        # Tail Gurobi's native log file to extract incumbents instead of relying
+        # on Python callbacks, which appear unreliable in this Gurobi/Django setup.
+        _stop_log_reader = None
+        _log_reader_thread = None
+        _log_path = None
+
         if progress_callback is not None:
-            try:
-                from django.db import close_old_connections
-                close_old_connections()
-            except Exception:
-                pass
-
             _tl = time_limit or 3600
-            _state = {'best_obj': float('inf'), 'best_bound': None, 'nodes': 0}
+            _fd, _log_path = tempfile.mkstemp(suffix='.log', prefix='milp_grb_')
+            os.close(_fd)
+            self.model.Params.LogFile = _log_path
+            _stop_log_reader = threading.Event()
 
-            def _gurobi_cb(where):
-                # Pure state updater — no DB writes here. The heartbeat thread
-                # reads _state every 3s and does all progress_callback calls.
+            def _log_reader():
                 try:
-                    if where == GRB.Callback.MIP:
-                        _state['nodes'] = int(self.model.cbGet(GRB.Callback.MIP_NODCNT))
-                        _state['best_bound'] = self.model.cbGet(GRB.Callback.MIP_OBJBND)
-                        obj_best = self.model.cbGet(GRB.Callback.MIP_OBJBST)
-                        if obj_best < 1e30:
-                            _state['best_obj'] = obj_best
-                    elif where == GRB.Callback.MIPSOL:
-                        _state['best_obj'] = self.model.cbGet(GRB.Callback.MIPSOL_OBJ)
-                        _state['nodes'] = int(self.model.cbGet(GRB.Callback.MIPSOL_NODCNT))
-                    elif where == GRB.Callback.MIPNODE:
-                        _state['nodes'] = int(self.model.cbGet(GRB.Callback.MIPNODE_NODCNT))
-                        obj_best = self.model.cbGet(GRB.Callback.MIPNODE_OBJBST)
-                        if obj_best < 1e30:
-                            _state['best_obj'] = obj_best
+                    from django.db import close_old_connections
+                    close_old_connections()
                 except Exception:
                     pass
 
-        # Heartbeat thread: fires every 3s so the viewer always has something to show
-        # even when Gurobi's event callbacks are sparse or silent.
-        _stop_heartbeat = None
-        _heartbeat_thread = None
-        if progress_callback is not None:
-            _stop_heartbeat = threading.Event()
+                def _process(line):
+                    # Gurobi marks new incumbents with H (heuristic) or * (LP optimal)
+                    # e.g. "H    0     0                      159.7600    0.00000  100%   -    0s"
+                    s = line.strip()
+                    if not s or s[0] not in ('H', '*'):
+                        return
+                    tokens = s.split()
+                    # Find gap% token; incumbent and bound are the two values before it
+                    for i, tok in enumerate(tokens):
+                        if tok.endswith('%') and i >= 2:
+                            try:
+                                obj = float(tokens[i - 2])
+                                bound = float(tokens[i - 1])
+                                gap = float(tok.rstrip('%'))
+                                elapsed = time.time() - start_time
+                                pct = min(int(elapsed / _tl * 100), 99)
+                                msg = (f"[{elapsed:.0f}s] Best: {obj:.4f}, "
+                                       f"bound={bound:.4f}, gap={gap:.2f}%")
+                                try:
+                                    progress_callback(pct, 100, msg)
+                                except Exception:
+                                    pass
+                            except (ValueError, IndexError):
+                                pass
+                            break
 
-            def _heartbeat():
-                while not _stop_heartbeat.wait(3.0):
-                    elapsed = time.time() - start_time
-                    pct = min(int(elapsed / _tl * 100), 99)
-                    best_obj = _state['best_obj']
-                    best_bound = _state['best_bound']
-                    nodes = _state['nodes']
-                    if best_obj < 1e30 and best_bound is not None:
-                        gap = abs(best_obj - best_bound) / (abs(best_obj) + 1e-10) * 100
-                        msg = (f"[{elapsed:.0f}s] Best: {best_obj:.4f}, "
-                               f"bound={best_bound:.4f}, gap={gap:.2f}%, nodes={nodes}")
-                    else:
-                        msg = f"[{elapsed:.0f}s] Optimizing... nodes={nodes}"
+                try:
+                    with open(_log_path, 'r') as f:
+                        while True:
+                            line = f.readline()
+                            if not line:
+                                if _stop_log_reader.is_set():
+                                    # Final drain — catch any lines written just before stop
+                                    for remaining in f.readlines():
+                                        _process(remaining)
+                                    break
+                                _stop_log_reader.wait(timeout=0.5)
+                                continue
+                            _process(line)
+                except Exception:
+                    pass
+                finally:
                     try:
-                        progress_callback(pct, 100, msg)
+                        os.unlink(_log_path)
                     except Exception:
                         pass
 
-            _heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True)
-            _heartbeat_thread.start()
+            _log_reader_thread = threading.Thread(target=_log_reader, daemon=True)
+            _log_reader_thread.start()
 
-        # Optimize
-        try:
-            self.model.optimize(_gurobi_cb)
-        finally:
-            if _stop_heartbeat is not None:
-                _stop_heartbeat.set()
-            if _heartbeat_thread is not None:
-                _heartbeat_thread.join(timeout=5)
+        self.model.optimize(None)
+
+        if _stop_log_reader is not None:
+            _stop_log_reader.set()
+        if _log_reader_thread is not None:
+            _log_reader_thread.join(timeout=5)
 
         runtime = time.time() - start_time
 

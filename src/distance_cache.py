@@ -80,5 +80,9 @@ class DistanceCache:
 
     @staticmethod
     def _haversine_proxy(p1, p2):
-        # The original cache used Euclidean * 111 (km/deg) as a quick proxy
-        return float(np.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) * 111)
+        import math
+        lat1, lon1 = math.radians(p1[0]), math.radians(p1[1])
+        lat2, lon2 = math.radians(p2[0]), math.radians(p2[1])
+        dlat, dlon = lat2 - lat1, lon2 - lon1
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        return float(6371 * 2 * math.asin(math.sqrt(a)))
