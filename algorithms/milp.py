@@ -89,7 +89,7 @@ class MDVRP:
         # Calculate effective deadline for each customer
         self.L_eff = {}
         for j in customers:
-            item_expiry_times = [self.expiry[m] for m in items if self.r[j].get(m, 0) == 1]
+            item_expiry_times = [self.expiry[m] for m in items if self.r[j].get(m, 0) > 0]
             if item_expiry_times:
                 self.L_eff[j] = min(self.L[j], min(item_expiry_times))
             else:

@@ -140,6 +140,8 @@ def load_experiment_data(experiment_id: int):
     full['dist'] = dist_dict
     full['T'] = T_dict
     data.update(full)
+    # build_all_matrices sets expiry to a placeholder (100); restore real values from dataset
+    data['expiry'] = data['item_expiry']
     return experiment, data
 
 
