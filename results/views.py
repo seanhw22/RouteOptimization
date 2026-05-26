@@ -112,6 +112,188 @@ def _build_name_maps(dataset_id):
     return {'vehicle_name_map': vehicle_name_map, 'node_name_map': node_name_map}
 
 
+def _format_runtime(seconds):
+    """Display runtime as seconds/minutes/hours."""
+    if seconds is None:
+        return 'N/A'
+    if seconds < 60:
+        return f'{seconds:.1f}s'
+    if seconds < 3600:
+        return f'{seconds / 60:.1f} min'
+    return f'{seconds / 3600:.1f} hr'
+
+
+def _build_conclusion(algo_results, node_count):
+    """Return interpretive HTML paragraph + recommendation for comparison conclusion.
+
+    algo_results: list of dicts {algorithm, distance, runtime (seconds|None), violations (int)}
+    node_count:   total node count for the dataset
+    """
+    if not algo_results:
+        return ''
+
+    algos = {r['algorithm']: r for r in algo_results}
+    has_milp = 'MILP' in algos
+    has_hga = 'HGA' in algos
+    has_greedy = 'Greedy' in algos
+    milp = algos.get('MILP')
+    hga = algos.get('HGA')
+    greedy = algos.get('Greedy')
+
+    best = min(algo_results, key=lambda r: r['distance'])
+    worst = max(algo_results, key=lambda r: r['distance'])
+    all_tied = best['distance'] == worst['distance']
+
+    parts = []
+
+    if len(algo_results) == 1:
+        r = algo_results[0]
+        rt = _format_runtime(r.get('runtime'))
+        if r['algorithm'] == 'Greedy':
+            parts.append(
+                f'Greedy provides a quick baseline solution at <strong>{r["distance"]} km</strong>, '
+                f'computed in {rt}. Running HGA or MILP would enable comparison and may yield shorter routes.'
+            )
+        elif r['algorithm'] == 'HGA':
+            parts.append(
+                f'HGA produced a solution at <strong>{r["distance"]} km</strong> in {rt}. '
+                f'Adding Greedy or MILP would provide reference points for comparison.'
+            )
+        else:
+            parts.append(
+                f'MILP found a solution at <strong>{r["distance"]} km</strong> in {rt}. '
+                f'Running Greedy or HGA would provide heuristic reference points.'
+            )
+
+    elif has_milp and has_hga and has_greedy:
+        milp_d = milp['distance']
+        hga_d = hga['distance']
+        greedy_d = greedy['distance']
+        milp_rt = _format_runtime(milp.get('runtime'))
+        hga_rt = _format_runtime(hga.get('runtime'))
+        greedy_rt = _format_runtime(greedy.get('runtime'))
+
+        if all_tied:
+            parts.append(
+                f'All three algorithms found the same total distance of <strong>{milp_d} km</strong>, '
+                f'indicating the instance is simple enough that all methods converge to the same solution. '
+                f'Greedy reached this in {greedy_rt}, HGA in {hga_rt}, and MILP in {milp_rt}.'
+            )
+        elif best['algorithm'] != 'MILP':
+            heur_best = min([hga, greedy], key=lambda r: r['distance'])
+            gap = round((milp_d - heur_best['distance']) / milp_d * 100, 1) if milp_d > 0 else 0
+            parts.append(
+                f'MILP returned <strong>{milp_d} km</strong> but was outperformed by {heur_best["algorithm"]} '
+                f'({heur_best["distance"]} km, {gap}% better). This typically happens when MILP hits its time limit '
+                f'before finding a better solution — {heur_best["algorithm"]} achieved this in '
+                f'{_format_runtime(heur_best.get("runtime"))} vs MILP\'s {milp_rt}.'
+            )
+        else:
+            hga_gap = round((hga_d - milp_d) / milp_d * 100, 1) if milp_d > 0 else 0
+            greedy_gap = round((greedy_d - milp_d) / milp_d * 100, 1) if milp_d > 0 else 0
+            parts.append(
+                f'MILP found the optimal solution at <strong>{milp_d} km</strong> in {milp_rt}. '
+                f'HGA was {hga_gap}% above at {hga_d} km (in {hga_rt}), while Greedy was '
+                f'{greedy_gap}% above at {greedy_d} km ({greedy_rt}). '
+                f'HGA\'s faster runtime makes it the practical choice at scale despite the small gap.'
+            )
+
+    elif has_greedy and has_hga:
+        greedy_d = greedy['distance']
+        hga_d = hga['distance']
+        greedy_rt = _format_runtime(greedy.get('runtime'))
+        hga_rt = _format_runtime(hga.get('runtime'))
+
+        if all_tied:
+            parts.append(
+                f'Both Greedy and HGA produced the same total distance of <strong>{greedy_d} km</strong>. '
+                f'This instance is simple enough that the greedy baseline suffices — HGA adds no improvement here. '
+                f'Greedy computed in {greedy_rt}, HGA in {hga_rt}.'
+            )
+        elif hga_d < greedy_d:
+            gap = round((greedy_d - hga_d) / greedy_d * 100, 1) if greedy_d > 0 else 0
+            parts.append(
+                f'HGA improved over Greedy by <strong>{gap}%</strong> — from {greedy_d} km down to {hga_d} km. '
+                f'HGA took {hga_rt} vs Greedy\'s {greedy_rt}; the extra runtime is justified by the quality gain.'
+            )
+        else:
+            gap = round((hga_d - greedy_d) / hga_d * 100, 1) if hga_d > 0 else 0
+            parts.append(
+                f'Greedy outperformed HGA: {greedy_d} km vs {hga_d} km ({gap}% better). '
+                f'This may indicate a parameter tuning issue with HGA. '
+                f'Greedy computed in {greedy_rt}, HGA in {hga_rt}.'
+            )
+
+    elif has_greedy and has_milp:
+        greedy_d = greedy['distance']
+        milp_d = milp['distance']
+        greedy_rt = _format_runtime(greedy.get('runtime'))
+        milp_rt = _format_runtime(milp.get('runtime'))
+
+        if milp_d <= greedy_d:
+            gap = round((greedy_d - milp_d) / milp_d * 100, 1) if milp_d > 0 else 0
+            parts.append(
+                f'MILP provides the optimal reference at <strong>{milp_d} km</strong> (in {milp_rt}). '
+                f'Greedy is {gap}% above at {greedy_d} km ({greedy_rt}). '
+                f'Running HGA would show whether a heuristic can close this gap efficiently.'
+            )
+        else:
+            gap = round((milp_d - greedy_d) / milp_d * 100, 1) if milp_d > 0 else 0
+            parts.append(
+                f'Greedy outperformed MILP: {greedy_d} km vs {milp_d} km ({gap}% better). '
+                f'MILP was likely stopped early by the time limit ({milp_rt}) before finding a better solution.'
+            )
+
+    elif has_hga and has_milp:
+        hga_d = hga['distance']
+        milp_d = milp['distance']
+        hga_rt = _format_runtime(hga.get('runtime'))
+        milp_rt = _format_runtime(milp.get('runtime'))
+
+        if milp_d <= hga_d:
+            gap = round((hga_d - milp_d) / milp_d * 100, 1) if milp_d > 0 else 0
+            parts.append(
+                f'MILP found the optimal solution at <strong>{milp_d} km</strong> in {milp_rt}. '
+                f'HGA is {gap}% above at {hga_d} km (in {hga_rt}), making it a strong near-optimal '
+                f'alternative with faster runtime for larger instances.'
+            )
+        else:
+            gap = round((milp_d - hga_d) / hga_d * 100, 1) if hga_d > 0 else 0
+            parts.append(
+                f'HGA outperformed MILP: {hga_d} km vs {milp_d} km ({gap}% better). '
+                f'MILP hit its time limit ({milp_rt}) before finding a better solution. '
+                f'HGA is the best practical choice here ({hga_rt}); MILP would likely improve with a longer time limit.'
+            )
+
+    # Violation context
+    violators = [r for r in algo_results if r.get('violations') and r['violations'] > 0]
+    if violators:
+        viol_strs = [
+            f'{r["algorithm"]} ({r["violations"]} violation{"s" if r["violations"] != 1 else ""})'
+            for r in violators
+        ]
+        parts.append(
+            f'<strong>Capacity note:</strong> {", ".join(viol_strs)} exceeded vehicle weight capacity constraints. '
+            f'These routes may not be operationally feasible without adjustments.'
+        )
+    else:
+        parts.append('All solutions respect vehicle capacity constraints.')
+
+    # Recommendation based on dataset size
+    if node_count <= 25:
+        parts.append(
+            '<strong>Recommendation:</strong> For this dataset size (≤25 nodes), MILP is recommended '
+            'for its optimality guarantee. HGA is a fast alternative when time is limited.'
+        )
+    else:
+        parts.append(
+            f'<strong>Recommendation:</strong> For larger datasets ({node_count} nodes), HGA offers '
+            f'the best quality-to-speed tradeoff. Greedy provides a quick initial estimate.'
+        )
+
+    return '<br><br>'.join(parts)
+
+
 def _bearing(lat1, lon1, lat2, lon2):
     """Compass bearing in degrees (0 = North, clockwise) from point 1 to point 2."""
     lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
@@ -251,7 +433,7 @@ def _build_geojson(solution, coordinates, node_name_map=None, vehicle_name_map=N
 
 def dashboard(request, batch_id):
     batch = get_owned_batch_or_404(request, batch_id)
-    experiments = list(batch.experiments.all().order_by('experiment_id'))
+    experiments = list(batch.experiments.all().select_related('metrics').order_by('experiment_id'))
     dataset_id = batch.dataset_id
     coordinates = _build_coordinates(dataset_id)
 
@@ -322,6 +504,18 @@ def dashboard(request, batch_id):
             item['routes'] = route_rows
             item['total_distance'] = round(total_dist, 2)
             item['weight_violated'] = exp.weight_violated
+
+            runtime = None
+            violations = 0
+            try:
+                if hasattr(exp, 'metrics'):
+                    runtime = exp.metrics.runtime
+                    violations = exp.metrics.constraint_violation or 0
+            except Exception:
+                pass
+            item['runtime'] = runtime
+            item['violations'] = violations
+
             chart_labels.append(exp.algorithm)
             chart_values.append(round(total_dist, 2))
 
@@ -332,76 +526,31 @@ def dashboard(request, batch_id):
         delta = batch.dataset.expires_at - timezone.now()
         days_remaining = max(0, delta.days)
 
-    comparison_text = ''
-    if len(chart_labels) == 1:
-        comparison_text = (
-            f'Only {chart_labels[0]} has completed so far, '
-            f'with a total distance of {chart_values[0]} km.'
-        )
-    elif len(chart_labels) >= 2:
-        pairs = list(zip(chart_labels, chart_values))
-        milp_pair = next(((l, v) for l, v in pairs if l.upper() == 'MILP'), None)
-        best_idx = chart_values.index(min(chart_values))
-        worst_idx = chart_values.index(max(chart_values))
-        best_algo = chart_labels[best_idx]
-        best_val = chart_values[best_idx]
-        worst_algo = chart_labels[worst_idx]
-        worst_val = chart_values[worst_idx]
+    node_count = Node.objects.filter(dataset_id=dataset_id).count()
 
-        if milp_pair:
-            milp_val = milp_pair[1]
-            heuristics = [(l, v) for l, v in pairs if l.upper() != 'MILP']
-            if not heuristics:
-                comparison_text = (
-                    f'MILP is the only completed algorithm, '
-                    f'with a total distance of {milp_val} km.'
-                )
-            elif best_val == worst_val:
-                comparison_text = (
-                    f'All algorithms produced the same total distance of {milp_val} km.'
-                )
-            elif best_algo.upper() != 'MILP':
-                # A heuristic beat MILP — it was likely stopped early
-                better = [(l, v) for l, v in heuristics if v < milp_val]
-                worse  = [(l, v) for l, v in heuristics if v > milp_val]
-                equal  = [(l, v) for l, v in heuristics if v == milp_val]
-                parts = []
-                for algo, val in sorted(better, key=lambda x: x[1]):
-                    gap = round((milp_val - val) / milp_val * 100, 1)
-                    parts.append(f'{algo} ({val} km, {gap}% better than MILP)')
-                for algo, val in sorted(equal, key=lambda x: x[1]):
-                    parts.append(f'{algo} matched MILP ({val} km)')
-                for algo, val in sorted(worse, key=lambda x: x[1]):
-                    gap = round((val - milp_val) / milp_val * 100, 1)
-                    parts.append(f'{algo} ({val} km, {gap}% above MILP)')
-                comparison_text = (
-                    f'MILP returned {milp_val} km but was outperformed, '
-                    f'likely due to an early time-limit stop. '
-                    + '; '.join(parts) + '.'
-                )
-            else:
-                # MILP is best — treat as optimal reference
-                parts = []
-                for algo, val in sorted(heuristics, key=lambda x: x[1]):
-                    if val == milp_val:
-                        parts.append(f'{algo} matched the MILP optimum ({val} km)')
-                    else:
-                        gap = round((val - milp_val) / milp_val * 100, 1)
-                        parts.append(f'{algo} was {gap}% above ({val} km)')
-                comparison_text = (
-                    f'MILP found the optimal solution at {milp_val} km. '
-                    + '; '.join(parts) + '.'
-                )
-        elif best_val == worst_val:
-            comparison_text = (
-                f'All algorithms produced the same total distance of {best_val} km.'
-            )
-        else:
-            pct = round((worst_val - best_val) / worst_val * 100, 1)
-            comparison_text = (
-                f'{best_algo} achieved the shortest total distance ({best_val} km), '
-                f'{pct}% less than {worst_algo} ({worst_val} km).'
-            )
+    comparison_table = [
+        {
+            'algorithm': item['algorithm'],
+            'distance': item['total_distance'],
+            'runtime': _format_runtime(item.get('runtime')),
+            'violations': item.get('violations', 0),
+        }
+        for item in algo_items
+        if item['status'] == 'completed'
+    ]
+
+    algo_results = [
+        {
+            'algorithm': item['algorithm'],
+            'distance': item['total_distance'],
+            'runtime': item.get('runtime'),
+            'violations': item.get('violations', 0),
+        }
+        for item in algo_items
+        if item['status'] == 'completed'
+    ]
+
+    comparison_text = _build_conclusion(algo_results, node_count)
 
     return render(request, 'results/dashboard.html', {
         'batch': batch,
@@ -412,6 +561,7 @@ def dashboard(request, batch_id):
         'vehicle_names_json': json.dumps(vehicle_name_map),
         'days_remaining': days_remaining,
         'share_token': str(batch.share_token) if batch.share_token else '',
+        'comparison_table': comparison_table,
         'comparison_text': comparison_text,
     })
 

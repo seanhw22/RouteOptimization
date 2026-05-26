@@ -13,8 +13,19 @@ class DatasetUploadForm(forms.Form):
         ('csv', 'Five individual CSV files'),
     ]
 
-    name = forms.CharField(max_length=255, required=True, help_text='A label you can recognise later.')
-    upload_type = forms.ChoiceField(choices=UPLOAD_TYPE_CHOICES, required=True, label='Upload format')
+    name = forms.CharField(
+        max_length=255,
+        required=True,
+        help_text='A label you can recognise later.',
+        error_messages={'required': 'Enter a name for this dataset.'},
+        widget=forms.TextInput(attrs={'placeholder': 'e.g. Jakarta West Region 7-node'}),
+    )
+    upload_type = forms.ChoiceField(
+        choices=UPLOAD_TYPE_CHOICES,
+        required=True,
+        label='Upload format',
+        error_messages={'required': 'Choose an upload format (XLSX or CSV).'},
+    )
 
     xlsx = forms.FileField(required=False, help_text='Single .xlsx with all five sheets.')
 

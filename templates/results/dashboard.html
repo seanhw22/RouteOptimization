@@ -110,9 +110,29 @@
     <div style="max-width:600px">
         <canvas id="comparison-chart"></canvas>
     </div>
-    {% if comparison_text %}
-    <p class="muted" style="margin-top:0.75rem">{{ comparison_text }}</p>
+
+    <h2>Conclusion</h2>
+    {% if comparison_table %}
+    <table class="data" style="margin-top:1rem">
+        <thead>
+            <tr><th>Algorithm</th><th>Total Distance (km)</th><th>Runtime</th><th>Weight Violations</th></tr>
+        </thead>
+        <tbody>
+        {% for row in comparison_table %}
+        <tr>
+            <td>{{ row.algorithm }}</td>
+            <td>{{ row.distance }}</td>
+            <td>{{ row.runtime }}</td>
+            <td>{{ row.violations|default:"0" }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
     {% endif %}
+    {% if comparison_text %}
+    <div class="muted" style="margin-top:0.75rem;line-height:1.6">{{ comparison_text|safe }}</div>
+    {% endif %}
+
     {% else %}
     <p class="muted">No completed experiments to compare yet.</p>
     {% endif %}
