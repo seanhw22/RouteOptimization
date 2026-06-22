@@ -7,6 +7,7 @@ from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.permissions import (
@@ -124,7 +125,7 @@ def kill(request, batch_id, exp_id):
         raise Http404('Experiment not found in this batch')
 
     if exp.status == 'completed':
-        return JsonResponse({'ok': False, 'error': 'Experiment already completed'}, status=400)
+        return JsonResponse({'ok': False, 'error': _('Experiment already completed')}, status=400)
 
     terminate_experiment(exp)
     return JsonResponse({'ok': True, 'experiment_id': exp.pk, 'status': 'killed'})

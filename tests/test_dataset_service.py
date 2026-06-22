@@ -1,11 +1,36 @@
 """Smoke tests for datasets.services: validate_frames, save_dataset, parse_uploaded."""
 
 import io
+from pathlib import Path
 
 import pandas as pd
 import pytest
+from django.conf import settings
+from openpyxl import load_workbook
 
 from datasets.services import DatasetValidationError, parse_uploaded, save_dataset, validate_frames
+
+
+def test_dataset_template_has_required_blank_sheets():
+    template_path = Path(settings.BASE_DIR) / 'static' / 'datasets' / 'dataset_template.xlsx'
+    workbook = load_workbook(template_path, read_only=True)
+
+    expected_headers = {
+        'depots': ['depot_id', 'x', 'y'],
+        'customers': ['customer_id', 'x', 'y', 'deadline_hours'],
+        'vehicles': [
+            'vehicle_id', 'depot_id', 'vehicle_type', 'capacity_kg',
+            'max_operational_hrs', 'speed_kmh',
+        ],
+        'items': ['item_id', 'weight_kg', 'expiry_hours'],
+        'orders': ['customer_id', 'item_id', 'quantity'],
+    }
+
+    assert workbook.sheetnames == list(expected_headers)
+    for sheet_name, headers in expected_headers.items():
+        sheet = workbook[sheet_name]
+        assert [cell.value for cell in sheet[1]] == headers
+        assert sheet.max_row == 1
 
 
 # ── validate_frames ──────────────────────────────────────────────────────────

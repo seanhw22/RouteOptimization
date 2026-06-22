@@ -68,7 +68,7 @@ def stats_dashboard(request):
     # --- Recent experiments ---
     recent_list = list(
         Experiment.objects
-        .select_related('dataset', 'metrics')
+        .select_related('dataset__user', 'metrics')
         .order_by('-experiment_id')[:10]
     )
 

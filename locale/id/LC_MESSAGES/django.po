@@ -1,0 +1,503 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: id\n"
+
+msgid "Language selection"
+msgstr "Pilihan bahasa"
+
+msgid "Datasets"
+msgstr "Dataset"
+
+msgid "Upload"
+msgstr "Unggah"
+
+msgid "Logout"
+msgstr "Keluar"
+
+msgid "Guest"
+msgstr "Tamu"
+
+msgid "Login"
+msgstr "Masuk"
+
+msgid "Register"
+msgstr "Daftar"
+
+msgid "Continue as guest"
+msgstr "Lanjut sebagai tamu"
+
+msgid "Continue as Guest"
+msgstr "Lanjut sebagai Tamu"
+
+msgid "Optimize Multi-Depot Distribution Routes"
+msgstr "Optimalkan Rute Distribusi Multi-Depot"
+
+msgid "How It Works"
+msgstr "Cara Kerja"
+
+msgid "How-to"
+msgstr "Panduan"
+
+msgid "Methodology"
+msgstr "Metodologi"
+
+msgid "About"
+msgstr "Tentang"
+
+msgid "Upload Dataset"
+msgstr "Unggah Dataset"
+
+msgid "Configure & Run"
+msgstr "Konfigurasi & Jalankan"
+
+msgid "Watch Progress"
+msgstr "Pantau Progres"
+
+msgid "View Results"
+msgstr "Lihat Hasil"
+
+msgid "Sign in"
+msgstr "Masuk"
+
+msgid "Email"
+msgstr "Email"
+
+msgid "Password"
+msgstr "Kata sandi"
+
+msgid "Forgot password?"
+msgstr "Lupa kata sandi?"
+
+msgid "Create account"
+msgstr "Buat akun"
+
+msgid "Upload dataset"
+msgstr "Unggah dataset"
+
+msgid "Upload your logistics data as a single XLSX workbook or as individual CSV files."
+msgstr "Unggah data logistik Anda sebagai satu buku kerja XLSX atau beberapa berkas CSV terpisah."
+
+msgid "Quick-load a test dataset"
+msgstr "Muat cepat dataset pengujian"
+
+msgid "Required column schema"
+msgstr "Skema kolom wajib"
+
+msgid "Download XLSX template"
+msgstr "Unduh template XLSX"
+
+msgid "Dataset name"
+msgstr "Nama dataset"
+
+msgid "XLSX file"
+msgstr "Berkas XLSX"
+
+msgid "Upload & preview"
+msgstr "Unggah & pratinjau"
+
+msgid "Your datasets"
+msgstr "Dataset Anda"
+
+msgid "Upload new"
+msgstr "Unggah baru"
+
+msgid "Delete"
+msgstr "Hapus"
+
+msgid "Delete this dataset? This cannot be undone."
+msgstr "Hapus dataset ini? Tindakan ini tidak dapat dibatalkan."
+
+msgid "Run solver"
+msgstr "Jalankan solver"
+
+msgid "Configure solver"
+msgstr "Konfigurasi solver"
+
+msgid "Algorithms"
+msgstr "Algoritma"
+
+msgid "Generations"
+msgstr "Generasi"
+
+msgid "Population size"
+msgstr "Ukuran populasi"
+
+msgid "Mutation rate"
+msgstr "Laju mutasi"
+
+msgid "Crossover rate"
+msgstr "Laju crossover"
+
+msgid "Random seed"
+msgstr "Seed acak"
+
+msgid "Launch run"
+msgstr "Mulai proses"
+
+msgid "Cancel"
+msgstr "Batal"
+
+msgid "Results"
+msgstr "Hasil"
+
+msgid "Back to run"
+msgstr "Kembali ke proses"
+
+msgid "Copy link"
+msgstr "Salin tautan"
+
+msgid "Generate share link"
+msgstr "Buat tautan berbagi"
+
+msgid "Route Map"
+msgstr "Peta Rute"
+
+msgid "Route Statistics"
+msgstr "Statistik Rute"
+
+msgid "Algorithm Comparison"
+msgstr "Perbandingan Algoritma"
+
+msgid "Conclusion"
+msgstr "Kesimpulan"
+
+msgid "Routes"
+msgstr "Rute"
+
+msgid "All"
+msgstr "Semua"
+
+msgid "None"
+msgstr "Tidak ada"
+
+msgid "No depot"
+msgstr "Tanpa depot"
+
+msgid "Vehicle"
+msgstr "Kendaraan"
+
+msgid "Total Distance (km)"
+msgstr "Total Jarak (km)"
+
+msgid "That email is already registered."
+msgstr "Email tersebut sudah terdaftar."
+
+msgid "Invalid email or password."
+msgstr "Email atau kata sandi tidak valid."
+
+msgid "Please upload an XLSX file."
+msgstr "Silakan unggah berkas XLSX."
+
+msgid "Pick at least one algorithm to run."
+msgstr "Pilih setidaknya satu algoritma untuk dijalankan."
+
+msgid "Dataset"
+msgstr "Dataset"
+
+msgid "Rename"
+msgstr "Ubah nama"
+
+msgid "Save"
+msgstr "Simpan"
+
+msgid "Created"
+msgstr "Dibuat"
+
+msgid "Expires"
+msgstr "Berakhir"
+
+msgid "Share this dataset:"
+msgstr "Bagikan dataset ini:"
+
+msgid "Share these results:"
+msgstr "Bagikan hasil ini:"
+
+msgid "depots"
+msgstr "depot"
+
+msgid "customers"
+msgstr "pelanggan"
+
+msgid "vehicles"
+msgstr "kendaraan"
+
+msgid "items"
+msgstr "item"
+
+msgid "orders"
+msgstr "pesanan"
+
+msgid "Past runs"
+msgstr "Proses sebelumnya"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "View run"
+msgstr "Lihat proses"
+
+msgid "No runs yet."
+msgstr "Belum ada proses."
+
+msgid "Run the solver"
+msgstr "Jalankan solver"
+
+msgid "Depots"
+msgstr "Depot"
+
+msgid "Customers (first 50)"
+msgstr "Pelanggan (50 pertama)"
+
+msgid "Vehicles"
+msgstr "Kendaraan"
+
+msgid "Items"
+msgstr "Item"
+
+msgid "Orders (first 50)"
+msgstr "Pesanan (50 pertama)"
+
+msgid "MILP ok"
+msgstr "MILP tersedia"
+
+msgid "no MILP"
+msgstr "tanpa MILP"
+
+msgid "Sheet / file"
+msgstr "Lembar / berkas"
+
+msgid "Required columns"
+msgstr "Kolom wajib"
+
+msgid "Please choose a format."
+msgstr "Silakan pilih format."
+
+msgid "Please select an XLSX file."
+msgstr "Silakan pilih berkas XLSX."
+
+msgid "Please select the"
+msgstr "Silakan pilih"
+
+msgid "file."
+msgstr "berkas."
+
+msgid "Batch"
+msgstr "Batch"
+
+msgid "Guest session:"
+msgstr "Sesi tamu:"
+
+msgid "to keep it permanently."
+msgstr "untuk menyimpannya secara permanen."
+
+msgid "weight exceeded"
+msgstr "berat terlampaui"
+
+msgid "Total distance:"
+msgstr "Total jarak:"
+
+msgid "Best objective:"
+msgstr "Objektif terbaik:"
+
+msgid "Export results:"
+msgstr "Ekspor hasil:"
+
+msgid "Recommended"
+msgstr "Disarankan"
+
+msgid "Formatted report with route map, statistics, and summary — best for sharing or printing."
+msgstr "Laporan terformat berisi peta rute, statistik, dan ringkasan — terbaik untuk dibagikan atau dicetak."
+
+msgid "Spreadsheet data for further analysis in Excel or similar tools."
+msgstr "Data spreadsheet untuk analisis lanjutan di Excel atau alat serupa."
+
+msgid "Geographic route data for GIS tools like QGIS or mapping APIs."
+msgstr "Data rute geografis untuk alat GIS seperti QGIS atau API peta."
+
+msgid "Experiment status:"
+msgstr "Status eksperimen:"
+
+msgid "Results only available for completed experiments."
+msgstr "Hasil hanya tersedia untuk eksperimen yang selesai."
+
+msgid "Vehicle"
+msgstr "Kendaraan"
+
+msgid "Stops"
+msgstr "Pemberhentian"
+
+msgid "Distance (km)"
+msgstr "Jarak (km)"
+
+msgid "Time (h)"
+msgstr "Waktu (jam)"
+
+msgid "Weight (kg)"
+msgstr "Berat (kg)"
+
+msgid "Capacity (kg)"
+msgstr "Kapasitas (kg)"
+
+msgid "Algorithm"
+msgstr "Algoritma"
+
+msgid "Runtime"
+msgstr "Waktu proses"
+
+msgid "Weight Violations"
+msgstr "Pelanggaran Berat"
+
+msgid "Already have an account?"
+msgstr "Sudah punya akun?"
+msgid "Back to sign in"
+msgstr "Kembali ke masuk"
+msgid "Best"
+msgstr "Terbaik"
+msgid "Check your email"
+msgstr "Periksa email Anda"
+msgid "Choose a new password"
+msgstr "Pilih kata sandi baru"
+msgid "Confirm new password"
+msgstr "Konfirmasi kata sandi baru"
+msgid "Dataset:"
+msgstr "Dataset:"
+msgid "Elapsed"
+msgstr "Waktu berlalu"
+msgid "HGA parameters"
+msgstr "Parameter HGA"
+msgid "Live Run"
+msgstr "Proses Langsung"
+msgid "Name"
+msgstr "Nama"
+msgid "New password"
+msgstr "Kata sandi baru"
+msgid "No account?"
+msgstr "Belum punya akun?"
+msgid "No completed experiments to compare yet."
+msgstr "Belum ada eksperimen selesai untuk dibandingkan."
+msgid "No datasets yet."
+msgstr "Belum ada dataset."
+msgid "No routes stored."
+msgstr "Belum ada rute tersimpan."
+msgid "Nodes"
+msgstr "Node"
+msgid "Password reset"
+msgstr "Atur ulang kata sandi"
+msgid "Request a new one"
+msgstr "Minta yang baru"
+msgid "Reset password"
+msgstr "Atur ulang kata sandi"
+msgid "Run"
+msgstr "Proses"
+msgid "Run solver on"
+msgstr "Jalankan solver pada"
+msgid "Send reset link"
+msgstr "Kirim tautan pengaturan ulang"
+msgid "Set new password"
+msgstr "Atur kata sandi baru"
+msgid "Share this run:"
+msgstr "Bagikan proses ini:"
+msgid "Skip MILP"
+msgstr "Lewati MILP"
+msgid "Stagnation limit (generations)"
+msgstr "Batas stagnasi (generasi)"
+msgid "Time limit (seconds)"
+msgstr "Batas waktu (detik)"
+msgid "Total nodes:"
+msgstr "Total node:"
+msgid "Upload one"
+msgstr "Unggah satu"
+msgid "available"
+msgstr "tersedia"
+msgid "completed"
+msgstr "selesai"
+msgid "continue as guest"
+msgstr "lanjut sebagai tamu"
+msgid "disabled (more than 25 nodes)"
+msgstr "dinonaktifkan (lebih dari 25 node)"
+msgid "disabled (only ≤25 nodes)"
+msgstr "dinonaktifkan (hanya ≤25 node)"
+msgid "m"
+msgstr "m"
+msgid "name"
+msgstr "nama"
+msgid "nodes"
+msgstr "node"
+msgid "running"
+msgstr "berjalan"
+msgid "s"
+msgstr "d"
+msgid "sign in"
+msgstr "masuk"
+msgid "to get started."
+msgstr "untuk memulai."
+
+msgid "RouteForge — Multi-Depot Vehicle Routing Optimizer"
+msgstr "RouteForge — Pengoptimal Rute Kendaraan Multi-Depot"
+
+msgid "My Datasets"
+msgstr "Dataset Saya"
+
+msgid "or"
+msgstr "atau"
+
+msgid "to save"
+msgstr "untuk menyimpan"
+
+msgid "Go to My Datasets"
+msgstr "Buka Dataset Saya"
+
+msgid "Go to Datasets"
+msgstr "Buka Dataset"
+
+msgid "RouteForge solves the Multi-Depot Vehicle Routing Problem for consumer product distribution — packed food and beverages — using three algorithms you can compare side by side."
+msgstr "RouteForge menyelesaikan Multi-Depot Vehicle Routing Problem untuk distribusi produk konsumen — makanan dan minuman kemasan — menggunakan tiga algoritma yang dapat Anda bandingkan berdampingan."
+
+msgid "Provide depots, customers, vehicles, items, and orders via a single XLSX file or five CSV files."
+msgstr "Sediakan depot, pelanggan, kendaraan, item, dan pesanan melalui satu berkas XLSX atau lima berkas CSV."
+
+msgid "Choose algorithms and tune parameters like population size, mutation rate, or MILP time limit, then start the run."
+msgstr "Pilih algoritma dan atur parameter seperti ukuran populasi, laju mutasi, atau batas waktu MILP, lalu mulai proses."
+
+msgid "Monitor each algorithm's progress in real time as it solves your routing problem."
+msgstr "Pantau kemajuan setiap algoritma secara langsung saat menyelesaikan masalah perutean Anda."
+
+msgid "Explore route maps, statistics, algorithm comparison charts, and export reports as PDF, CSV, or GeoJSON."
+msgstr "Jelajahi peta rute, statistik, grafik perbandingan algoritma, dan ekspor laporan sebagai PDF, CSV, atau GeoJSON."
+
+msgid "Hybrid Genetic Algorithm"
+msgstr "Algoritma Genetika Hibrida"
+
+msgid "Mixed-Integer Linear Programming"
+msgstr "Pemrograman Linear Bilangan Bulat Campuran"
+
+msgid "A fast constructive heuristic that builds routes by inserting the nearest feasible customer at each step. Serves as a quick baseline solution with minimal computation time."
+msgstr "Heuristik konstruktif cepat yang membangun rute dengan menyisipkan pelanggan layak terdekat pada setiap langkah. Berfungsi sebagai solusi dasar cepat dengan waktu komputasi minimal."
+
+msgid "Combines genetic algorithm operators (selection, crossover, mutation) with local search to balance solution quality and runtime. Effective for medium to large instances."
+msgstr "Menggabungkan operator algoritma genetika (seleksi, crossover, mutasi) dengan pencarian lokal untuk menyeimbangkan kualitas solusi dan waktu proses. Efektif untuk instans sedang hingga besar."
+
+msgid "A mathematical optimization model solved by Gurobi that guarantees optimal solutions. Best suited for small instances (up to 25 nodes) due to exponential complexity growth."
+msgstr "Model optimasi matematis yang diselesaikan oleh Gurobi dan menjamin solusi optimal. Paling sesuai untuk instans kecil (hingga 25 node) karena pertumbuhan kompleksitas eksponensial."
+
+msgid "RouteForge is an undergraduate thesis project investigating the Multi-Depot Vehicle Routing Problem (MDVRP) applied to the distribution of consumer products — specifically packed food and beverages."
+msgstr "RouteForge adalah proyek skripsi sarjana yang meneliti Multi-Depot Vehicle Routing Problem (MDVRP) yang diterapkan pada distribusi produk konsumen — khususnya makanan dan minuman kemasan."
+
+msgid "The problem scope includes:"
+msgstr "Cakupan masalah meliputi:"
+
+msgid "Multiple depots serving a shared fleet of vehicles"
+msgstr "Beberapa depot yang melayani armada kendaraan bersama"
+
+msgid "Vehicle capacity and maximum operational hour constraints"
+msgstr "Kendala kapasitas kendaraan dan jam operasional maksimum"
+
+msgid "Customer delivery time windows (deadline hours)"
+msgstr "Jendela waktu pengiriman pelanggan (batas jam)"
+
+msgid "Item expiry constraints for perishable goods"
+msgstr "Kendala masa kedaluwarsa item untuk barang mudah rusak"
+
+msgid "Comparison of three algorithms: Greedy, HGA, and MILP"
+msgstr "Perbandingan tiga algoritma: Greedy, HGA, dan MILP"

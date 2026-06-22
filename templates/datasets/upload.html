@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
-{% block title %}Upload dataset · RouteForge{% endblock %}
+{% load static i18n %}
+{% block title %}{% translate 'Upload dataset' %} · RouteForge{% endblock %}
 {% block extra_head %}
 <style>
 .sample-datasets { margin-bottom: 1.5rem; }
@@ -22,12 +23,12 @@
 {% block content %}
 <section>
     <header>
-        <h1>Upload dataset</h1>
-        <p class="muted">Upload your logistics data as a single XLSX workbook or as individual CSV files.</p>
+        <h1>{% translate 'Upload dataset' %}</h1>
+        <p class="muted">{% translate 'Upload your logistics data as a single XLSX workbook or as individual CSV files.' %}</p>
     </header>
 
     <div class="sample-datasets">
-        <p class="muted" style="font-size:.875rem;margin:0 0 .75rem;font-weight:500">Quick-load a test dataset</p>
+        <p class="muted" style="font-size:.875rem;margin:0 0 .75rem;font-weight:500">{% translate 'Quick-load a test dataset' %}</p>
         <div class="sample-grid">
             {% for key, label, milp in sample_datasets %}
             <form method="post" action="{% url 'datasets:load_sample' %}">
@@ -35,8 +36,8 @@
                 <input type="hidden" name="sample" value="{{ key }}">
                 <button type="submit" class="sample-card">
                     <span class="sample-size">{{ key }}</span>
-                    <span class="sample-label">nodes</span>
-                    {% if milp %}<span class="sample-badge milp">MILP ok</span>{% else %}<span class="sample-badge">no MILP</span>{% endif %}
+                    <span class="sample-label">{% translate 'nodes' %}</span>
+                    {% if milp %}<span class="sample-badge milp">{% translate 'MILP ok' %}</span>{% else %}<span class="sample-badge">{% translate 'no MILP' %}</span>{% endif %}
                 </button>
             </form>
             {% endfor %}
@@ -44,9 +45,12 @@
     </div>
 
     <div class="schema-info">
-        <p class="muted" style="font-size:.875rem;margin:0 0 .75rem;font-weight:500">Required column schema</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:0 0 .75rem">
+            <p class="muted" style="font-size:.875rem;margin:0;font-weight:500">{% translate 'Required column schema' %}</p>
+            <a class="btn" href="{% static 'datasets/dataset_template.xlsx' %}" download>{% translate 'Download XLSX template' %}</a>
+        </div>
         <table class="data">
-            <thead><tr><th>Sheet / file</th><th>Required columns</th></tr></thead>
+            <thead><tr><th>{% translate 'Sheet / file' %}</th><th>{% translate 'Required columns' %}</th></tr></thead>
             <tbody>
                 <tr><td><code>depots</code></td><td><code>depot_id, x, y</code></td></tr>
                 <tr><td><code>customers</code></td><td><code>customer_id, x, y, deadline_hours</code></td></tr>
@@ -63,7 +67,7 @@
         {% csrf_token %}
 
         <div class="field">
-            <label for="id_name">Dataset name</label>
+            <label for="id_name">{% translate 'Dataset name' %}</label>
             {{ form.name }}{{ form.name.errors }}
         </div>
 
@@ -74,7 +78,7 @@
 
         <div id="panel-xlsx" hidden>
             <div class="field">
-                <label for="id_xlsx">XLSX file</label>
+            <label for="id_xlsx">{% translate 'XLSX file' %}</label>
                 {{ form.xlsx }}{{ form.xlsx.errors }}
             </div>
         </div>
@@ -88,11 +92,12 @@
             {% endif %}{% endfor %}
         </div>
 
-        <button type="submit" class="primary">Upload &amp; preview</button>
+        <button type="submit" class="primary">{% translate 'Upload & preview' %}</button>
     </form>
 
     <script>
     (function () {
+        var labels = { choose: "{% translate 'Please choose a format.' %}", xlsx: "{% translate 'Please select an XLSX file.' %}", select: "{% translate 'Please select the' %}", file: "{% translate 'file.' %}" };
         var sel = document.getElementById('id_upload_type');
         var panelXlsx = document.getElementById('panel-xlsx');
         var panelCsv  = document.getElementById('panel-csv');
@@ -153,17 +158,17 @@
             var ok = true;
 
             if (!type) {
-                addFieldError(sel, 'Please choose a format.');
+                addFieldError(sel, labels.choose);
                 ok = false;
             } else if (type === 'xlsx') {
                 if (!hasFile(xlsxInput)) {
-                    addFieldError(xlsxInput, 'Please select an XLSX file.');
+                    addFieldError(xlsxInput, labels.xlsx);
                     ok = false;
                 }
             } else if (type === 'csv') {
                 csvInputs.forEach(function (c) {
                     if (!hasFile(c.el)) {
-                        addFieldError(c.el, 'Please select the ' + c.label + ' CSV file.');
+                        addFieldError(c.el, labels.select + ' ' + c.label + ' CSV ' + labels.file);
                         ok = false;
                     }
                 });

@@ -1,35 +1,36 @@
 {% extends 'base.html' %}
-{% block title %}Results · Batch #{{ batch.id }} · RouteForge{% endblock %}
+{% load i18n %}
+{% block title %}{% translate 'Results' %} · {% translate 'Batch' %} #{{ batch.id }} · RouteForge{% endblock %}
 {% block content %}
 <section>
     <header class="row spread">
         <div>
-            <h1>Results <small class="muted">#{{ batch.id }}</small></h1>
+            <h1>{% translate 'Results' %} <small class="muted">#{{ batch.id }}</small></h1>
             <p class="muted">{{ batch.dataset.name }}</p>
         </div>
-        <a class="btn" href="{% url 'runs:viewer' batch.id %}{% if share_token %}?token={{ share_token }}{% endif %}">Back to run</a>
+        <a class="btn" href="{% url 'runs:viewer' batch.id %}{% if share_token %}?token={{ share_token }}{% endif %}">{% translate 'Back to run' %}</a>
     </header>
 
     {% if days_remaining is not None %}
     <div class="banner warn">
-        <strong>Guest session:</strong> your dataset expires in {{ days_remaining }} day{{ days_remaining|pluralize }}.
-        <a href="{% url 'accounts:register' %}">Register</a> to keep it permanently.
+        <strong>{% translate 'Guest session:' %}</strong> {% blocktranslate count days=days_remaining %}your dataset expires in {{ days }} day.{% plural %}your dataset expires in {{ days }} days.{% endblocktranslate %}
+        <a href="{% url 'accounts:register' %}">{% translate 'Register' %}</a> {% translate 'to keep it permanently.' %}
     </div>
     {% endif %}
 
     {% if share_token %}
     <div class="banner info">
-        <strong>Share these results:</strong>
+        <strong>{% translate 'Share these results:' %}</strong>
         <input class="share-link-input" id="results-share-link" type="text" readonly
                value="{{ request.scheme }}://{{ request.get_host }}{% url 'results:dashboard' batch.id %}?token={{ share_token }}">
-        <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('results-share-link').value)">Copy link</button>
+        <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('results-share-link').value)">{% translate 'Copy link' %}</button>
     </div>
     {% elif request.user.is_authenticated %}
     <div class="banner info">
-        <strong>Share these results:</strong>
+        <strong>{% translate 'Share these results:' %}</strong>
         <form method="post" action="{% url 'runs:generate_share_link' batch.id %}" style="display:inline">
             {% csrf_token %}
-            <button class="btn" type="submit">Generate share link</button>
+            <button class="btn" type="submit">{% translate 'Generate share link' %}</button>
         </form>
     </div>
     {% endif %}
@@ -42,7 +43,7 @@
                 data-tab="{{ item.algorithm }}"
                 aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
             {{ item.algorithm }}
-            <span class="badge {% if item.status == 'completed' %}ok{% elif item.status == 'running' %}info{% else %}muted{% endif %}">{{ item.status }}{% if item.weight_violated %} - weight exceeded{% endif %}</span>
+            <span class="badge {% if item.status == 'completed' %}ok{% elif item.status == 'running' %}info{% else %}muted{% endif %}">{{ item.status }}{% if item.weight_violated %} - {% translate 'weight exceeded' %}{% endif %}</span>
         </button>
         {% endfor %}
     </div>
@@ -52,35 +53,35 @@
          {% if not forloop.first %}style="display:none"{% endif %}>
         {% if item.status == 'completed' %}
         <p class="muted" style="margin-bottom:1rem">
-            Total distance: <strong>{{ item.total_distance }} km</strong>
-            {% if item.best_objective %} · Best objective: <strong>{{ item.best_objective|floatformat:2 }}</strong>{% endif %}
+            {% translate 'Total distance:' %} <strong>{{ item.total_distance }} km</strong>
+            {% if item.best_objective %} · {% translate 'Best objective:' %} <strong>{{ item.best_objective|floatformat:2 }}</strong>{% endif %}
         </p>
         <div style="margin-bottom:1.5rem">
-            <p class="muted" style="margin-bottom:0.6rem;font-size:0.85rem">Export results:</p>
+            <p class="muted" style="margin-bottom:0.6rem;font-size:0.85rem">{% translate 'Export results:' %}</p>
             <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-start">
                 <div style="display:flex;flex-direction:column;gap:0.3rem;max-width:210px">
-                    <a class="btn" href="{% url 'results:download_pdf' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">PDF <span class="badge ok">Recommended</span></a>
-                    <span class="muted" style="font-size:0.8rem">Formatted report with route map, statistics, and summary — best for sharing or printing.</span>
+                    <a class="btn" href="{% url 'results:download_pdf' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">PDF <span class="badge ok">{% translate 'Recommended' %}</span></a>
+                    <span class="muted" style="font-size:0.8rem">{% translate 'Formatted report with route map, statistics, and summary — best for sharing or printing.' %}</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:0.3rem;max-width:190px">
                     <a class="btn" href="{% url 'results:download_csv' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">CSV</a>
-                    <span class="muted" style="font-size:0.8rem">Spreadsheet data for further analysis in Excel or similar tools.</span>
+                    <span class="muted" style="font-size:0.8rem">{% translate 'Spreadsheet data for further analysis in Excel or similar tools.' %}</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:0.3rem;max-width:200px">
                     <a class="btn" href="{% url 'results:download_geojson' batch.id item.experiment_id %}{% if share_token %}?token={{ share_token }}{% endif %}">GeoJSON</a>
-                    <span class="muted" style="font-size:0.8rem">Geographic route data for GIS tools like QGIS or mapping APIs.</span>
+                    <span class="muted" style="font-size:0.8rem">{% translate 'Geographic route data for GIS tools like QGIS or mapping APIs.' %}</span>
                 </div>
             </div>
         </div>
 
-        <h2>Route Map</h2>
+        <h2>{% translate 'Route Map' %}</h2>
         <div id="map-{{ item.algorithm }}" class="leaflet-map"></div>
 
-        <h2>Route Statistics</h2>
+        <h2>{% translate 'Route Statistics' %}</h2>
         {% if item.routes %}
         <table class="data">
             <thead>
-                <tr><th>Vehicle</th><th>Stops</th><th>Distance (km)</th><th>Time (h)</th><th>Weight (kg)</th><th>Capacity (kg)</th></tr>
+                <tr><th>{% translate 'Vehicle' %}</th><th>{% translate 'Stops' %}</th><th>{% translate 'Distance (km)' %}</th><th>{% translate 'Time (h)' %}</th><th>{% translate 'Weight (kg)' %}</th><th>{% translate 'Capacity (kg)' %}</th></tr>
             </thead>
             <tbody>
             {% for row in item.routes %}
@@ -96,26 +97,26 @@
             </tbody>
         </table>
         {% else %}
-        <p class="muted">No routes stored.</p>
+        <p class="muted">{% translate 'No routes stored.' %}</p>
         {% endif %}
 
         {% else %}
-        <p class="muted">Experiment status: <strong>{{ item.status }}</strong>. Results only available for completed experiments.</p>
+        <p class="muted">{% translate 'Experiment status:' %} <strong>{{ item.status }}</strong>. {% translate 'Results only available for completed experiments.' %}</p>
         {% endif %}
     </div>
     {% endfor %}
 
-    <h2>Algorithm Comparison</h2>
+    <h2>{% translate 'Algorithm Comparison' %}</h2>
     {% if chart_labels != '[]' %}
     <div style="max-width:600px">
         <canvas id="comparison-chart"></canvas>
     </div>
 
-    <h2>Conclusion</h2>
+    <h2>{% translate 'Conclusion' %}</h2>
     {% if comparison_table %}
     <table class="data" style="margin-top:1rem">
         <thead>
-            <tr><th>Algorithm</th><th>Total Distance (km)</th><th>Runtime</th><th>Weight Violations</th></tr>
+            <tr><th>{% translate 'Algorithm' %}</th><th>{% translate 'Total Distance (km)' %}</th><th>{% translate 'Runtime' %}</th><th>{% translate 'Weight Violations' %}</th></tr>
         </thead>
         <tbody>
         {% for row in comparison_table %}
@@ -134,7 +135,7 @@
     {% endif %}
 
     {% else %}
-    <p class="muted">No completed experiments to compare yet.</p>
+    <p class="muted">{% translate 'No completed experiments to compare yet.' %}</p>
     {% endif %}
 </section>
 {% endblock %}
@@ -150,6 +151,11 @@ geojsonData["{{ item.algorithm }}"] = {{ item.geojson_json | safe }};
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const labels = {
+        routes: "{% translate 'Routes' %}", all: "{% translate 'All' %}", none: "{% translate 'None' %}",
+        noDepot: "{% translate 'No depot' %}", vehicle: "{% translate 'Vehicle' %}",
+        totalDistance: "{% translate 'Total Distance (km)' %}"
+    };
 
     function addRouteArrows(coords, color, targetMap) {
         for (let i = 0; i < coords.length - 1; i++) {
@@ -259,10 +265,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     div.innerHTML = `
                         <div class="map-filter-header">
-                            <strong>Routes</strong>
+                            <strong>${labels.routes}</strong>
                             <div class="map-filter-actions">
-                                <button class="filter-all-btn" data-action="show">All</button>
-                                <button class="filter-all-btn" data-action="hide">None</button>
+                                <button class="filter-all-btn" data-action="show">${labels.all}</button>
+                                <button class="filter-all-btn" data-action="hide">${labels.none}</button>
                             </div>
                         </div>
                         <div class="map-filter-scroll"></div>`;
@@ -272,7 +278,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     for (const [depotId, vids] of Object.entries(depotGroups)) {
                         const depotCol = depotColorMap[depotId] || '#2C3E50';
                         const depotLabel = depotId.includes('_')
-                            ? depotId.split('_').slice(1).join('_') : (depotId || 'No depot');
+                            ? depotId.split('_').slice(1).join('_') : (depotId || labels.noDepot);
 
                         const group = document.createElement('div');
                         group.className = 'map-filter-group';
@@ -292,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             row.className = 'map-filter-row';
                             row.innerHTML = `<input type="checkbox" checked data-vid="${vid}">
                                 <span class="legend-swatch" style="background:${vehicleMeta[vid].col}"></span>
-                                ${vehicleNames[vid] || 'Vehicle ' + vid}`;
+                                ${vehicleNames[vid] || labels.vehicle + ' ' + vid}`;
                             group.appendChild(row);
                         }
                         scroll.appendChild(group);
@@ -376,7 +382,7 @@ document.addEventListener('DOMContentLoaded', function () {
             data: {
                 labels: {{ chart_labels | safe }},
                 datasets: [{
-                    label: 'Total Distance (km)',
+                    label: labels.totalDistance,
                     data: {{ chart_values | safe }},
                     backgroundColor: ['#4ECDC4', '#FF6B6B', '#45B7D1'],
                     borderRadius: 4,

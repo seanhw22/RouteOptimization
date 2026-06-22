@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.permissions import (
@@ -71,7 +72,7 @@ def upload(request):
                     guest_ids = list(request.session.get('guest_datasets', []))
                     guest_ids.append(dataset.dataset_id)
                     request.session['guest_datasets'] = guest_ids
-                messages.success(request, f'Dataset "{dataset.name}" uploaded.')
+                messages.success(request, _('Dataset "%(name)s" uploaded.') % {'name': dataset.name})
                 url = reverse('datasets:detail', args=[dataset.dataset_id])
                 if is_ajax:
                     return JsonResponse({'ok': True, 'redirect': url})
@@ -168,9 +169,9 @@ def rename_dataset(request, dataset_id):
     if new_name:
         dataset.name = new_name
         dataset.save(update_fields=['name'])
-        messages.success(request, f'Dataset renamed to "{new_name}".')
+        messages.success(request, _('Dataset renamed to "%(name)s".') % {'name': new_name})
     else:
-        messages.error(request, 'Name cannot be empty.')
+        messages.error(request, _('Name cannot be empty.'))
     return redirect('datasets:detail', dataset_id=dataset_id)
 
 
@@ -184,7 +185,7 @@ def delete_dataset(request, dataset_id):
         if dataset_id in guest_ids:
             guest_ids.remove(dataset_id)
             request.session['guest_datasets'] = guest_ids
-    messages.success(request, f'Dataset "{name}" deleted.')
+    messages.success(request, _('Dataset "%(name)s" deleted.') % {'name': name})
     return redirect('datasets:list')
 
 
@@ -196,7 +197,7 @@ def load_sample(request):
 
     key = request.POST.get('sample', '')
     if key not in _SAMPLE_DATASETS:
-        messages.error(request, 'Unknown sample dataset.')
+        messages.error(request, _('Unknown sample dataset.'))
         return redirect('datasets:upload')
 
     label, display_name = _SAMPLE_DATASETS[key]
@@ -207,7 +208,7 @@ def load_sample(request):
             frames = parse_uploaded({'xlsx': f})
         validate_frames(frames)
     except (DatasetValidationError, OSError) as e:
-        messages.error(request, f'Could not load sample dataset: {e}')
+        messages.error(request, _('Could not load sample dataset: %(error)s') % {'error': e})
         return redirect('datasets:upload')
 
     if not request.session.session_key:
@@ -225,5 +226,5 @@ def load_sample(request):
         guest_ids.append(dataset.dataset_id)
         request.session['guest_datasets'] = guest_ids
 
-    messages.success(request, f'Sample dataset "{dataset.name}" loaded.')
+    messages.success(request, _('Sample dataset "%(name)s" loaded.') % {'name': dataset.name})
     return redirect('datasets:detail', dataset_id=dataset.dataset_id)

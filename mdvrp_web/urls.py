@@ -8,6 +8,7 @@ from runs.admin_views import stats_dashboard
 
 
 urlpatterns = [
+    path('i18n/', include('django.conf.urls.i18n')),
     path('', homepage, name='root'),
     path('admin/stats/', admin.site.admin_view(stats_dashboard), name='admin_stats'),
     path('admin/', admin.site.urls),

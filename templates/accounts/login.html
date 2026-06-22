@@ -1,24 +1,3 @@
-{% extends 'base.html' %}
-{% block title %}Sign in · RouteForge{% endblock %}
-{% block content %}
-<section class="card">
-    <h1>Sign in</h1>
-    <form method="post">
-        {% csrf_token %}
-        {% if form.non_field_errors %}<div class="formerrors">{{ form.non_field_errors }}</div>{% endif %}
-        <div class="field">
-            <label for="id_email">Email</label>
-            {{ form.email }}
-            {{ form.email.errors }}
-        </div>
-        <div class="field">
-            <label for="id_password">Password</label>
-            {{ form.password }}
-            {{ form.password.errors }}
-        </div>
-        <button type="submit" class="primary">Sign in</button>
-    </form>
-    <p class="muted"><a href="{% url 'accounts:password_reset' %}">Forgot password?</a></p>
-    <p class="muted">No account? <a href="{% url 'accounts:register' %}">Register</a> or <a href="{% url 'accounts:guest' %}">continue as guest</a>.</p>
-</section>
-{% endblock %}
+{% extends 'base.html' %}{% load i18n %}
+{% block title %}{% translate 'Sign in' %} · RouteForge{% endblock %}
+{% block content %}<section class="card"><h1>{% translate 'Sign in' %}</h1><form method="post">{% csrf_token %}{% if form.non_field_errors %}<div class="formerrors">{{ form.non_field_errors }}</div>{% endif %}<div class="field"><label for="id_email">{% translate 'Email' %}</label>{{ form.email }}{{ form.email.errors }}</div><div class="field"><label for="id_password">{% translate 'Password' %}</label>{{ form.password }}{{ form.password.errors }}</div><button type="submit" class="primary">{% translate 'Sign in' %}</button></form><p class="muted"><a href="{% url 'accounts:password_reset' %}">{% translate 'Forgot password?' %}</a></p><p class="muted">{% translate 'No account?' %} <a href="{% url 'accounts:register' %}">{% translate 'Register' %}</a> {% translate 'or' %} <a href="{% url 'accounts:guest' %}">{% translate 'continue as guest' %}</a>.</p></section>{% endblock %}

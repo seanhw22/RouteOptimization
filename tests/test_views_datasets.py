@@ -10,6 +10,14 @@ def test_upload_authenticated_returns_200(auth_client):
 
 
 @pytest.mark.django_db
+def test_upload_renders_xlsx_template_download(auth_client):
+    response = auth_client.get('/datasets/upload/')
+    assert response.status_code == 200
+    assert b'/static/datasets/dataset_template.xlsx' in response.content
+    assert b'Download XLSX template' in response.content
+
+
+@pytest.mark.django_db
 def test_upload_anonymous_redirects(client):
     response = client.get('/datasets/upload/')
     assert response.status_code == 302

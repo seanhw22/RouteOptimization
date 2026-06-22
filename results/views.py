@@ -5,6 +5,8 @@ import json
 import math
 
 from django.http import HttpResponse
+from django.utils.translation import gettext as _
+from django.utils.translation import get_language
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 
@@ -131,6 +133,9 @@ def _build_conclusion(algo_results, node_count):
     """
     if not algo_results:
         return ''
+
+    if (get_language() or '').startswith('id'):
+        return _build_indonesian_conclusion(algo_results, node_count)
 
     algos = {r['algorithm']: r for r in algo_results}
     has_milp = 'MILP' in algos
@@ -289,6 +294,54 @@ def _build_conclusion(algo_results, node_count):
         parts.append(
             f'<strong>Recommendation:</strong> For larger datasets ({node_count} nodes), HGA offers '
             f'the best quality-to-speed tradeoff. Greedy provides a quick initial estimate.'
+        )
+
+    return '<br><br>'.join(parts)
+
+
+def _build_indonesian_conclusion(algo_results, node_count):
+    """Build the localized Indonesian counterpart of the results conclusion."""
+    best = min(algo_results, key=lambda result: result['distance'])
+    worst = max(algo_results, key=lambda result: result['distance'])
+    algorithms = ', '.join(result['algorithm'] for result in algo_results)
+    parts = []
+
+    if best['distance'] == worst['distance']:
+        parts.append(
+            f'Semua algoritma yang dijalankan ({algorithms}) menghasilkan total jarak yang sama, '
+            f'yaitu <strong>{best["distance"]} km</strong>. Ini menunjukkan bahwa instans ini cukup sederhana '
+            f'sehingga metode-metode tersebut mencapai solusi yang sama.'
+        )
+    else:
+        runtime = _format_runtime(best.get('runtime'))
+        parts.append(
+            f'<strong>{best["algorithm"]}</strong> memberikan hasil terbaik dengan total jarak '
+            f'<strong>{best["distance"]} km</strong> dan waktu proses {runtime}. '
+            f'Hasil terpanjang adalah {worst["algorithm"]} dengan {worst["distance"]} km.'
+        )
+
+    violators = [result for result in algo_results if result.get('violations', 0) > 0]
+    if violators:
+        details = ', '.join(
+            f'{result["algorithm"]} ({result["violations"]} pelanggaran)'
+            for result in violators
+        )
+        parts.append(
+            f'<strong>Catatan kapasitas:</strong> {details} melampaui batas kapasitas berat kendaraan. '
+            f'Rute-rute tersebut mungkin belum layak secara operasional tanpa penyesuaian.'
+        )
+    else:
+        parts.append('Semua solusi memenuhi batas kapasitas kendaraan.')
+
+    if node_count <= 25:
+        parts.append(
+            '<strong>Rekomendasi:</strong> Untuk ukuran dataset ini (≤25 node), MILP direkomendasikan '
+            'karena menjamin optimalitas. HGA adalah alternatif cepat saat waktu terbatas.'
+        )
+    else:
+        parts.append(
+            f'<strong>Rekomendasi:</strong> Untuk dataset yang lebih besar ({node_count} node), HGA menawarkan '
+            'keseimbangan terbaik antara kualitas solusi dan kecepatan. Greedy memberikan perkiraan awal yang cepat.'
         )
 
     return '<br><br>'.join(parts)
@@ -570,7 +623,7 @@ def download_csv(request, batch_id, exp_id):
     batch = get_owned_batch_or_404(request, batch_id)
     exp = get_object_or_404(Experiment, pk=exp_id, run_batch=batch)
     if exp.status != 'completed':
-        return HttpResponse('Experiment not completed', status=400)
+        return HttpResponse(_('Experiment not completed'), status=400)
 
     solution = _build_solution(exp_id, batch.dataset_id)
     name_maps = _build_name_maps(batch.dataset_id)
@@ -586,7 +639,7 @@ def download_pdf(request, batch_id, exp_id):
     batch = get_owned_batch_or_404(request, batch_id)
     exp = get_object_or_404(Experiment, pk=exp_id, run_batch=batch)
     if exp.status != 'completed':
-        return HttpResponse('Experiment not completed', status=400)
+        return HttpResponse(_('Experiment not completed'), status=400)
 
     solution = _build_solution(exp_id, batch.dataset_id)
     problem_data = _build_problem_data(batch.dataset_id)
@@ -605,7 +658,7 @@ def download_geojson(request, batch_id, exp_id):
     batch = get_owned_batch_or_404(request, batch_id)
     exp = get_object_or_404(Experiment, pk=exp_id, run_batch=batch)
     if exp.status != 'completed':
-        return HttpResponse('Experiment not completed', status=400)
+        return HttpResponse(_('Experiment not completed'), status=400)
 
     solution = _build_solution(exp_id, batch.dataset_id)
     coordinates = _build_coordinates(batch.dataset_id)

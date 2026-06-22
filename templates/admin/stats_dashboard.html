@@ -161,6 +161,7 @@
     <thead>
       <tr>
         <th>#</th>
+        <th>Started By</th>
         <th>Dataset</th>
         <th>Algorithm</th>
         <th>Status</th>
@@ -172,6 +173,13 @@
       {% for exp in recent_list %}
       <tr>
         <td><a href="{% url 'admin:runs_experiment_change' exp.experiment_id %}">{{ exp.experiment_id }}</a></td>
+        <td>
+          {% if exp.dataset.user %}
+          <a href="{% url 'admin:auth_user_change' exp.dataset.user.pk %}">{{ exp.dataset.user.get_username }}</a>
+          {% else %}
+          &mdash;
+          {% endif %}
+        </td>
         <td>{{ exp.dataset.name }}</td>
         <td>{{ exp.algorithm }}</td>
         <td style="text-transform:capitalize;">{{ exp.status }}</td>

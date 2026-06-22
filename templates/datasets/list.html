@@ -1,35 +1,3 @@
-{% extends 'base.html' %}
-{% block title %}Datasets · RouteForge{% endblock %}
-{% block content %}
-<section>
-    <header class="row spread">
-        <h1>Your datasets</h1>
-        <a class="btn primary" href="{% url 'datasets:upload' %}">Upload new</a>
-    </header>
-    {% if datasets %}
-    <table class="data">
-        <thead><tr><th>Name</th><th>Nodes</th><th>MILP</th><th>Created</th><th>Expires</th><th></th></tr></thead>
-        <tbody>
-        {% for d in datasets %}
-        <tr>
-            <td><a href="{% url 'datasets:detail' d.dataset_id %}">{{ d.name }}</a></td>
-            <td>{{ d.node_count }}</td>
-            <td>{% if d.milp_available %}<span class="badge ok">available</span>{% else %}<span class="badge muted">> 25 nodes</span>{% endif %}</td>
-            <td>{{ d.created_at|date:"Y-m-d H:i" }}</td>
-            <td>{% if d.expires_at %}{{ d.expires_at|date:"Y-m-d" }}{% else %}—{% endif %}</td>
-            <td class="btn-group">
-                <a class="btn" href="{% url 'runs:configure' d.dataset_id %}">Run solver</a>
-                <form method="post" action="{% url 'datasets:delete' d.dataset_id %}" onsubmit="return confirm('Delete dataset &quot;{{ d.name }}&quot;? This cannot be undone.')">
-                    {% csrf_token %}
-                    <button class="btn danger" type="submit">Delete</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="muted">No datasets yet. <a href="{% url 'datasets:upload' %}">Upload one</a> to get started.</p>
-    {% endif %}
-</section>
-{% endblock %}
+{% extends 'base.html' %}{% load i18n %}
+{% block title %}{% translate 'Datasets' %} · RouteForge{% endblock %}
+{% block content %}<section><header class="row spread"><h1>{% translate 'Your datasets' %}</h1><a class="btn primary" href="{% url 'datasets:upload' %}">{% translate 'Upload new' %}</a></header>{% if datasets %}<table class="data"><thead><tr><th>{% translate 'Name' %}</th><th>{% translate 'Nodes' %}</th><th>MILP</th><th>{% translate 'Created' %}</th><th>{% translate 'Expires' %}</th><th></th></tr></thead><tbody>{% for d in datasets %}<tr><td><a href="{% url 'datasets:detail' d.dataset_id %}">{{ d.name }}</a></td><td>{{ d.node_count }}</td><td>{% if d.milp_available %}<span class="badge ok">{% translate 'available' %}</span>{% else %}<span class="badge muted">&gt; 25 {% translate 'nodes' %}</span>{% endif %}</td><td>{{ d.created_at|date:"Y-m-d H:i" }}</td><td>{% if d.expires_at %}{{ d.expires_at|date:"Y-m-d" }}{% else %}—{% endif %}</td><td class="btn-group"><a class="btn" href="{% url 'runs:configure' d.dataset_id %}">{% translate 'Run solver' %}</a><form method="post" action="{% url 'datasets:delete' d.dataset_id %}" onsubmit="return confirm('{% translate 'Delete this dataset? This cannot be undone.' %}')">{% csrf_token %}<button class="btn danger" type="submit">{% translate 'Delete' %}</button></form></td></tr>{% endfor %}</tbody></table>{% else %}<p class="muted">{% translate 'No datasets yet.' %} <a href="{% url 'datasets:upload' %}">{% translate 'Upload one' %}</a> {% translate 'to get started.' %}</p>{% endif %}</section>{% endblock %}

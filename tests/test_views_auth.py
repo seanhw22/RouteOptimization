@@ -6,17 +6,17 @@ import pytest
 # ── Root redirect ─────────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
-def test_root_anonymous_redirects_to_login(client):
+def test_root_anonymous_renders_landing_page(client):
     response = client.get('/')
-    assert response.status_code == 302
-    assert 'login' in response['Location']
+    assert response.status_code == 200
+    assert b'Optimize Multi-Depot Distribution Routes' in response.content
 
 
 @pytest.mark.django_db
-def test_root_authenticated_redirects_to_datasets(auth_client):
+def test_root_authenticated_renders_landing_page(auth_client):
     response = auth_client.get('/')
-    assert response.status_code == 302
-    assert 'datasets' in response['Location']
+    assert response.status_code == 200
+    assert b'My Datasets' in response.content
 
 
 # ── Login ─────────────────────────────────────────────────────────────────────
