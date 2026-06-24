@@ -59,3 +59,22 @@ def test_kill_returns_ok_and_sets_killed_status(auth_client, db_dataset, test_us
     assert response.json()['ok'] is True
     exp.refresh_from_db()
     assert exp.status == 'killed'
+
+
+@pytest.mark.django_db
+def test_viewer_shows_skip_control_for_each_algorithm(auth_client, db_dataset, test_user):
+    batch = create_batch(dataset=db_dataset, user=test_user, session_key='')
+    for algorithm in ('Greedy', 'HGA', 'MILP'):
+        Experiment.objects.create(
+            dataset=db_dataset,
+            run_batch=batch,
+            algorithm=algorithm,
+            status='running',
+        )
+
+    response = auth_client.get(f'/runs/{batch.pk}/')
+
+    assert response.status_code == 200
+    assert b'Skip Greedy' in response.content
+    assert b'Skip HGA' in response.content
+    assert b'Skip MILP' in response.content
